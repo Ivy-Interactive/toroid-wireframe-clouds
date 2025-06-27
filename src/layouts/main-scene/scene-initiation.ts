@@ -34,7 +34,6 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   
   container.appendChild(renderer.domElement);
 
-  // --- Replace cube with torus wireframe ---
   // Torus parameters
   const torusRadius = 1.5;
   const tubeRadius = 0.5;
