@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: 210 100% 60%; /* Modern blue */
+  --color-secondary: 220 13% 18%; /* Dark slate */
+}
+
+@layer base {
+  .bg-primary {
+    background-color: hsl(var(--color-primary));
+  }
+  
+  .bg-secondary {
+    background-color: hsl(var(--color-secondary));
+  }
+  
+  .text-primary {
+    color: hsl(var(--color-primary));
+  }
+  
+  .border-primary {
+    border-color: hsl(var(--color-primary));
+  }
+  
+  .bg-primary\/20 {
+    background-color: hsl(var(--color-primary) / 0.2);
+  }
+  
+  .bg-primary\/30 {
+    background-color: hsl(var(--color-primary) / 0.3);
+  }
+  
+  .border-primary\/20 {
+    border-color: hsl(var(--color-primary) / 0.2);
+  }
+  
+  .border-primary\/30 {
+    border-color: hsl(var(--color-primary) / 0.3);
+  }
+  
+  .text-white\/80 {
+    color: hsl(0 0% 100% / 0.8);
+  }
+}

@@ -15,11 +15,11 @@ export const MainScene: React.FC = () => {
   };
 
   return (
-    <div className="main-scene-layout">
-      <div className="scene-container">
-        <ThreeScene className="three-scene" parameters={sceneParameters} />
+    <div className="flex w-screen h-screen bg-secondary text-white">
+      <div className="flex-1 relative min-w-0">
+        <ThreeScene className="w-full h-full" parameters={sceneParameters} />
       </div>
-      <div className="controls-panel">
+      <div className="w-64 bg-secondary border-l border-primary/20 p-6 flex-shrink-0">
         <SceneForm onParametersChange={handleParametersChange} />
       </div>
     </div>

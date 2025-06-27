@@ -31,19 +31,54 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     };
     animate();
 
-    // Handle window resize
+    // Handle resize
     const handleResize = () => {
       if (sceneSetupRef.current && containerRef.current) {
         const { camera, renderer } = sceneSetupRef.current;
         const container = containerRef.current;
-
-        camera.aspect = container.clientWidth / container.clientHeight;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        // Update camera aspect ratio
+        camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
+        
+        // Update renderer size (both internal and CSS)
+        renderer.setSize(width, height, false);
+        
+        // Update canvas CSS size - ensure it matches container exactly
+        const canvas = renderer.domElement;
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        canvas.style.maxWidth = `${width}px`;
+        canvas.style.maxHeight = `${height}px`;
+        canvas.style.minWidth = `${width}px`;
+        canvas.style.minHeight = `${height}px`;
+        
+        // Force a re-render to ensure everything is updated
+        renderer.render(sceneSetupRef.current.scene, camera);
       }
     };
 
-    window.addEventListener("resize", handleResize);
+    // Initial resize call
+    handleResize();
+
+    // Set up ResizeObserver for more responsive resizing
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Debounced window resize handler
+    let resizeTimeout: number;
+    const debouncedResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(handleResize, 16); // ~60fps
+    };
+
+    window.addEventListener("resize", debouncedResize);
 
     // Cleanup function
     return () => {
@@ -53,7 +88,8 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
       if (sceneSetupRef.current) {
         sceneSetupRef.current.cleanup();
       }
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", debouncedResize);
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -61,18 +97,18 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   useEffect(() => {
     if (parameters && sceneSetupRef.current) {
       // Update scene based on parameters
-      console.log("Scene parameters updated:", parameters);
     }
   }, [parameters]);
 
   return (
-    <div
-      ref={containerRef}
+    <div 
+      ref={containerRef} 
       className={className}
-      style={{
+      style={{ 
+        position: "relative",
+        overflow: "hidden",
         width: "100%",
         height: "100%",
-        position: "relative",
       }}
     />
   );

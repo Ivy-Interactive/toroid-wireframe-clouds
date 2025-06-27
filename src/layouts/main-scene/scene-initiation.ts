@@ -23,15 +23,27 @@ export const createScene = (container: HTMLElement): SceneSetup => {
 
   // Create renderer
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setClearColor(0x000000, 1);
+  renderer.setSize(container.clientWidth, container.clientHeight, false);
+  renderer.setClearColor(0x1a1a2e, 1);
+  
+  const canvas = renderer.domElement;
+  canvas.style.width = `${container.clientWidth}px`;
+  canvas.style.height = `${container.clientHeight}px`;
+  canvas.style.display = 'block';
+  
   container.appendChild(renderer.domElement);
 
-  // Create cube
   const geometry = new THREE.BoxGeometry(1, 1, 1);
-  const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x00ff00,
+    wireframe: false,
+  });
   const cube = new THREE.Mesh(geometry, material);
   scene.add(cube);
+
+  // Add some ambient light to make it more visible
+  const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+  scene.add(ambientLight);
 
   // Position camera
   camera.position.z = 5;
