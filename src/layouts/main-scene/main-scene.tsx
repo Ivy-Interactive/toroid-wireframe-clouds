@@ -4,9 +4,16 @@ import { SceneForm, type SceneParameters } from "../../components/scene-form";
 
 export const MainScene: React.FC = () => {
   const [sceneParameters, setSceneParameters] = useState<SceneParameters>({
-    dotCount: 1000,
     wireframeMode: true,
-    cloudDensity: 0.5,
+    torusRadius: 1.5,
+    tubeRadius: 0.5,
+    radialSegments: 128,
+    tubularSegments: 64,
+    twistStrengthX: 0.0,
+    twistStrengthY: 1.0,
+    twistStrengthZ: 0.0,
+    twistFrequency: 1.0,
+    twistPhase: 0.0,
   });
 
   const handleParametersChange = (params: SceneParameters) => {
