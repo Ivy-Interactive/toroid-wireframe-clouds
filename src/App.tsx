@@ -1,11 +1,12 @@
-import './App.css'
+import "./App.css";
+import { MainScene } from "./layouts/main-scene";
 
 function App() {
   return (
     <>
-      <h1>Hello World</h1>
+      <MainScene />
     </>
-  )
+  );
 }
 
-export default App
+export default App;
