@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createScene } from "../../layouts/main-scene";
 import type { SceneSetup } from "../../layouts/main-scene";
 import type { SceneParameters } from "../scene-form";
+import { StatsOverlay } from "../stats-overlay";
+import { DrawCallsOverlay } from "../draw-calls-overlay";
+import Stats from "stats.js";
 
 interface ThreeSceneProps {
   className?: string;
@@ -15,6 +18,8 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneSetupRef = useRef<SceneSetup | null>(null);
   const animationIdRef = useRef<number | null>(null);
+  const [drawCalls, setDrawCalls] = useState(0);
+  const statsRef = useRef<Stats | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -25,7 +30,10 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     // Start animation loop
     const animate = () => {
       if (sceneSetupRef.current) {
+        statsRef.current?.begin();
         sceneSetupRef.current.animate();
+        setDrawCalls(sceneSetupRef.current.renderer.info.render.calls);
+        statsRef.current?.end();
       }
       animationIdRef.current = requestAnimationFrame(animate);
     };
@@ -110,6 +118,9 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         width: "100%",
         height: "100%",
       }}
-    />
+    >
+      <StatsOverlay statsRef={statsRef} />
+      <DrawCallsOverlay drawCalls={drawCalls} />
+    </div>
   );
 };
