@@ -1,12 +1,21 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 
+export interface CameraState {
+  position: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  target: { x: number; y: number; z: number };
+}
+
 export interface SceneSetup {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  controls: OrbitControls;
   blob: THREE.Object3D | undefined;
   animate: () => void;
+  getCameraState: () => CameraState;
+  setCameraState: (state: CameraState) => void;
   cleanup: () => void;
 }
 
@@ -49,6 +58,35 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
+  // Get camera state
+  const getCameraState = (): CameraState => {
+    return {
+      position: {
+        x: camera.position.x,
+        y: camera.position.y,
+        z: camera.position.z
+      },
+      rotation: {
+        x: camera.rotation.x,
+        y: camera.rotation.y,
+        z: camera.rotation.z
+      },
+      target: {
+        x: controls.target.x,
+        y: controls.target.y,
+        z: controls.target.z
+      }
+    };
+  };
+
+  // Set camera state
+  const setCameraState = (state: CameraState) => {
+    camera.position.set(state.position.x, state.position.y, state.position.z);
+    camera.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
+    controls.target.set(state.target.x, state.target.y, state.target.z);
+    controls.update();
+  };
+
   // Animation function: just render (no animation for now)
   const animate = () => {
     controls.update();
@@ -66,8 +104,11 @@ export const createScene = (container: HTMLElement): SceneSetup => {
     scene,
     camera,
     renderer,
+    controls,
     blob: undefined,
     animate,
+    getCameraState,
+    setCameraState,
     cleanup,
   };
 };

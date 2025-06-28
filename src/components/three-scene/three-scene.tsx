@@ -4,12 +4,14 @@ import type { SceneSetup } from "../../layouts/main-scene";
 import { StatsOverlay } from "../stats-overlay";
 import { DrawCallsOverlay } from "../draw-calls-overlay";
 import Stats from "stats.js";
-import type { SceneParameters } from "../scene-form";
+import type { SceneParameters, CameraState } from "../scene-form";
 import * as THREE from "three";
 
 interface ThreeSceneProps {
   className?: string;
   parameters?: SceneParameters;
+  onCameraStateChange?: (cameraState: CameraState) => void;
+  currentCameraState?: CameraState;
 }
 
 // Minimal 2D Perlin noise implementation
@@ -53,6 +55,8 @@ function perlin2(x: number, y: number) {
 export const ThreeScene: React.FC<ThreeSceneProps> = ({
   className,
   parameters,
+  onCameraStateChange,
+  currentCameraState,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneSetupRef = useRef<SceneSetup | null>(null);
@@ -123,6 +127,27 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
       resizeObserver.disconnect();
     };
   }, []);
+
+  // Handle camera state changes
+  useEffect(() => {
+    if (sceneSetupRef.current && currentCameraState) {
+      sceneSetupRef.current.setCameraState(currentCameraState);
+    }
+  }, [currentCameraState]);
+
+  // Extract camera state periodically and notify parent
+  useEffect(() => {
+    if (!sceneSetupRef.current || !onCameraStateChange) return;
+
+    const interval = setInterval(() => {
+      if (sceneSetupRef.current) {
+        const cameraState = sceneSetupRef.current.getCameraState();
+        onCameraStateChange(cameraState);
+      }
+    }, 100); // Update every 100ms
+
+    return () => clearInterval(interval);
+  }, [onCameraStateChange]);
 
   // Unified grid mesh generation
   useEffect(() => {
