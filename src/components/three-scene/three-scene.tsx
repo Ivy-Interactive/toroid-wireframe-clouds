@@ -4,21 +4,24 @@ import type { SceneSetup } from "../../layouts/main-scene";
 import { StatsOverlay } from "../stats-overlay";
 import { DrawCallsOverlay } from "../draw-calls-overlay";
 import Stats from "stats.js";
+import type { SceneParameters } from "../scene-form";
+import * as THREE from "three";
 
 interface ThreeSceneProps {
   className?: string;
-  // parameters?: SceneParameters; // Remove parameters prop
+  parameters?: SceneParameters;
 }
 
 export const ThreeScene: React.FC<ThreeSceneProps> = ({
   className,
-  // parameters, // Remove parameters usage
+  parameters,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneSetupRef = useRef<SceneSetup | null>(null);
   const animationIdRef = useRef<number | null>(null);
   const [drawCalls, setDrawCalls] = useState(0);
   const statsRef = useRef<Stats | null>(null);
+  const gridGroupRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -83,7 +86,75 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     };
   }, []);
 
-  // Remove parameter-driven mesh update logic
+  // Grid instancing effect
+  useEffect(() => {
+    if (!sceneSetupRef.current) return;
+    const scene = sceneSetupRef.current.scene;
+    // Remove old group if exists
+    if (gridGroupRef.current) {
+      scene.remove(gridGroupRef.current);
+      gridGroupRef.current.children.forEach((child: THREE.Object3D) => {
+        if ('geometry' in child && child.geometry) (child.geometry as THREE.BufferGeometry).dispose();
+        if ('material' in child && child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m: THREE.Material) => m.dispose());
+          } else {
+            (child.material as THREE.Material).dispose();
+          }
+        }
+      });
+    }
+    // Merge all grid cell geometries into one
+    const width = parameters?.gridWidth ?? 1;
+    const height = parameters?.gridHeight ?? 1;
+    const size = 1.5;
+    const spacing = 3.0;
+    const curveSegments = 32;
+    const cellVertexCount = 8 + curveSegments * 2; // 4 sides (8 verts) + curve (curveSegments*2 verts)
+    const totalCells = width * height;
+    const totalVertices = totalCells * cellVertexCount;
+    const mergedPositions = new Float32Array(totalVertices * 3);
+    let vtxOffset = 0;
+    for (let ix = 0; ix < width; ix++) {
+      for (let iy = 0; iy < height; iy++) {
+        // --- Custom mesh: curved diagonal square ---
+        const p0 = new THREE.Vector3(-size, -size, 0);
+        const p1 = new THREE.Vector3(size, -size, 0);
+        const p2 = new THREE.Vector3(size, size, 0);
+        const p3 = new THREE.Vector3(-size, size, 0);
+        const curve = new THREE.QuadraticBezierCurve3(
+          p0,
+          new THREE.Vector3(0, size * 1.2, 0),
+          p2
+        );
+        const curvePoints = curve.getPoints(curveSegments);
+        const vertices = [
+          p0, p1, p1, p2, p2, p3, p3, p0,
+          ...curvePoints.slice(0, -1).flatMap((pt, i) => [pt, curvePoints[i + 1]])
+        ];
+        // Offset all vertices by grid position
+        const offsetX = ix * spacing;
+        const offsetY = iy * spacing;
+        vertices.forEach((v) => {
+          mergedPositions[vtxOffset++] = v.x + offsetX;
+          mergedPositions[vtxOffset++] = v.y + offsetY;
+          mergedPositions[vtxOffset++] = v.z;
+        });
+      }
+    }
+    const mergedGeometry = new THREE.BufferGeometry();
+    mergedGeometry.setAttribute('position', new THREE.BufferAttribute(mergedPositions, 3));
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff99 });
+    const mergedMesh = new THREE.LineSegments(mergedGeometry, material);
+    // Center the merged mesh
+    mergedMesh.position.x = -((width - 1) * spacing) / 2;
+    mergedMesh.position.y = -((height - 1) * spacing) / 2;
+    // Add to scene as a group for cleanup compatibility
+    const group = new THREE.Group();
+    group.add(mergedMesh);
+    scene.add(group);
+    gridGroupRef.current = group;
+  }, [parameters?.gridWidth, parameters?.gridHeight]);
 
   return (
     <div 

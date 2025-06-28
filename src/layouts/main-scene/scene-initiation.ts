@@ -5,7 +5,7 @@ export interface SceneSetup {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  blob: THREE.Object3D;
+  blob: THREE.Object3D | undefined;
   animate: () => void;
   cleanup: () => void;
 }
@@ -35,40 +35,7 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   container.appendChild(renderer.domElement);
 
   // --- Custom Curved Diagonal Square Geometry ---
-  // Define square corners
-  const size = 1.5;
-  const p0 = new THREE.Vector3(-size, -size, 0);
-  const p1 = new THREE.Vector3(size, -size, 0);
-  const p2 = new THREE.Vector3(size, size, 0);
-  const p3 = new THREE.Vector3(-size, size, 0);
-
-  // Curved diagonal: from p0 to p2, with a control point for the curve
-  const curveSegments = 32;
-  const curve = new THREE.QuadraticBezierCurve3(
-    p0,
-    new THREE.Vector3(0, size * 1.2, 0), // control point above center
-    p2
-  );
-  const curvePoints = curve.getPoints(curveSegments);
-
-  // Build geometry: 4 sides + curved diagonal
-  const vertices = [
-    p0, p1, p1, p2, p2, p3, p3, p0, // square edges
-    ...curvePoints.slice(0, -1).flatMap((pt, i) => [pt, curvePoints[i + 1]]) // curve as line segments
-  ];
-  const positions = new Float32Array(vertices.length * 3);
-  vertices.forEach((v, i) => {
-    positions[i * 3] = v.x;
-    positions[i * 3 + 1] = v.y;
-    positions[i * 3 + 2] = v.z;
-  });
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  // Use LineSegments for wireframe look
-  const material = new THREE.LineBasicMaterial({ color: 0x00ff99 });
-  const mesh = new THREE.LineSegments(geometry, material);
-  scene.add(mesh);
+  // (Removed all geometry, material, and mesh creation)
 
   // Add some ambient light to make it more visible
   const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -92,8 +59,6 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const cleanup = () => {
     container.removeChild(renderer.domElement);
     renderer.dispose();
-    geometry.dispose();
-    material.dispose();
     controls.dispose();
   };
 
@@ -101,7 +66,7 @@ export const createScene = (container: HTMLElement): SceneSetup => {
     scene,
     camera,
     renderer,
-    blob: mesh,
+    blob: undefined,
     animate,
     cleanup,
   };
