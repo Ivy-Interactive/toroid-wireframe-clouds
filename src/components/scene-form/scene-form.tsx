@@ -5,37 +5,17 @@ interface SceneFormProps {
 }
 
 export interface SceneParameters {
-  wireframeMode: boolean;
-  torusRadius: number;
-  tubeRadius: number;
-  radialSegments: number;
-  tubularSegments: number;
-  twistStrengthX: number;
-  twistStrengthY: number;
-  twistStrengthZ: number;
-  twistFrequency: number;
-  twistPhase: number;
-  arcBulge: number;
   gridWidth: number;
   gridHeight: number;
 }
 
 export const SceneForm: React.FC<SceneFormProps> = ({ onParametersChange }) => {
   const [parameters, setParameters] = useState<SceneParameters>({
-    wireframeMode: false,
-    torusRadius: 1,
-    tubeRadius: 0.5,
-    radialSegments: 32,
-    tubularSegments: 32,
-    twistStrengthX: 0,
-    twistStrengthY: 0,
-    twistStrengthZ: 0,
-    twistFrequency: 1,
-    twistPhase: 0,
-    arcBulge: 0,
     gridWidth: 1,
     gridHeight: 1,
   });
+
+  const [copyStatus, setCopyStatus] = useState<string>("");
 
   const handleChange = (
     key: keyof SceneParameters,
@@ -46,9 +26,28 @@ export const SceneForm: React.FC<SceneFormProps> = ({ onParametersChange }) => {
     onParametersChange(newParameters);
   };
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(parameters, null, 2));
+      setCopyStatus("Copied!");
+      setTimeout(() => setCopyStatus(""), 2000);
+    } catch {
+      setCopyStatus("Failed to copy");
+      setTimeout(() => setCopyStatus(""), 2000);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white mb-4">Scene Parameters</h3>
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-white">Scene Parameters</h3>
+        <button
+          onClick={copyToClipboard}
+          className="px-3 py-1 text-sm bg-primary hover:bg-primary/80 text-white rounded transition-colors"
+        >
+          {copyStatus || "Copy Parameters"}
+        </button>
+      </div>
       <div className="space-y-3">
         <div className="space-y-1">
           <label htmlFor="gridWidth" className="block text-sm font-medium text-white/80">
