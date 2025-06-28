@@ -14,6 +14,7 @@ export const MainScene: React.FC = () => {
     twistStrengthZ: 0.0,
     twistFrequency: 1.0,
     twistPhase: 0.0,
+    arcBulge: 0.0,
   });
 
   const handleParametersChange = (params: SceneParameters) => {

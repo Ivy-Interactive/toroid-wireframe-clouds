@@ -15,6 +15,7 @@ export interface SceneParameters {
   twistStrengthZ: number;
   twistFrequency: number;
   twistPhase: number;
+  arcBulge: number;
 }
 
 export const SceneForm: React.FC<SceneFormProps> = ({ onParametersChange }) => {
@@ -29,6 +30,7 @@ export const SceneForm: React.FC<SceneFormProps> = ({ onParametersChange }) => {
     twistStrengthZ: 0.0,
     twistFrequency: 1.0,
     twistPhase: 0.0,
+    arcBulge: 0.0,
   });
 
   const handleChange = (
@@ -198,6 +200,22 @@ export const SceneForm: React.FC<SceneFormProps> = ({ onParametersChange }) => {
             step="0.01"
             value={parameters.twistPhase}
             onChange={(e) => handleChange("twistPhase", parseFloat(e.target.value))}
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="arcBulge" className="block text-sm font-medium text-white/80">
+            Arc Bulge: {parameters.arcBulge.toFixed(2)}
+          </label>
+          <input
+            id="arcBulge"
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={parameters.arcBulge}
+            onChange={(e) => handleChange("arcBulge", parseFloat(e.target.value))}
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
