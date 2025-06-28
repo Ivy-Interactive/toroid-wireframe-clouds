@@ -5,7 +5,7 @@ export interface SceneSetup {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  blob: THREE.Mesh;
+  blob: THREE.Object3D;
   animate: () => void;
   cleanup: () => void;
 }
@@ -34,50 +34,41 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   
   container.appendChild(renderer.domElement);
 
-  // Torus parameters
-  const torusRadius = 1.5;
-  const tubeRadius = 0.5;
-  const radialSegments = 128;
-  const tubularSegments = 64;
-  const twistAmount = Math.PI / 3; // moderate twist
+  // --- Custom Curved Diagonal Square Geometry ---
+  // Define square corners
+  const size = 1.5;
+  const p0 = new THREE.Vector3(-size, -size, 0);
+  const p1 = new THREE.Vector3(size, -size, 0);
+  const p2 = new THREE.Vector3(size, size, 0);
+  const p3 = new THREE.Vector3(-size, size, 0);
 
-  // Create torus geometry
-  const torusGeometry = new THREE.TorusGeometry(
-    torusRadius,
-    tubeRadius,
-    radialSegments,
-    tubularSegments
+  // Curved diagonal: from p0 to p2, with a control point for the curve
+  const curveSegments = 32;
+  const curve = new THREE.QuadraticBezierCurve3(
+    p0,
+    new THREE.Vector3(0, size * 1.2, 0), // control point above center
+    p2
   );
+  const curvePoints = curve.getPoints(curveSegments);
 
-  // Apply initial twist to the torus
-  for (let i = 0; i < torusGeometry.attributes.position.count; i++) {
-    const pos = new THREE.Vector3().fromBufferAttribute(
-      torusGeometry.attributes.position,
-      i
-    );
-    // Twist along the torus ring
-    const angle = (pos.x + pos.y) * twistAmount * 0.1;
-    const sin = Math.sin(angle);
-    const cos = Math.cos(angle);
-    // Apply twist to z/y
-    const y = pos.y * cos - pos.z * sin;
-    const z = pos.y * sin + pos.z * cos;
-    torusGeometry.attributes.position.setY(i, y);
-    torusGeometry.attributes.position.setZ(i, z);
-  }
-  torusGeometry.attributes.position.needsUpdate = true;
-
-  // Create wireframe material
-  const wireframeMaterial = new THREE.MeshBasicMaterial({
-    color: 0x00ff99,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.7,
+  // Build geometry: 4 sides + curved diagonal
+  const vertices = [
+    p0, p1, p1, p2, p2, p3, p3, p0, // square edges
+    ...curvePoints.slice(0, -1).flatMap((pt, i) => [pt, curvePoints[i + 1]]) // curve as line segments
+  ];
+  const positions = new Float32Array(vertices.length * 3);
+  vertices.forEach((v, i) => {
+    positions[i * 3] = v.x;
+    positions[i * 3 + 1] = v.y;
+    positions[i * 3 + 2] = v.z;
   });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-  const torus = new THREE.Mesh(torusGeometry, wireframeMaterial);
-  scene.add(torus);
-
+  // Use LineSegments for wireframe look
+  const material = new THREE.LineBasicMaterial({ color: 0x00ff99 });
+  const mesh = new THREE.LineSegments(geometry, material);
+  scene.add(mesh);
 
   // Add some ambient light to make it more visible
   const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -91,26 +82,9 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // Animation function: mutate torus vertices for blobby effect
+  // Animation function: just render (no animation for now)
   const animate = () => {
-    const time = performance.now() * 0.001;
-    const positions = torusGeometry.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-      // Get original position (approximate by using initial torus math)
-      const u = (i % tubularSegments) / tubularSegments * Math.PI * 2;
-      const v = Math.floor(i / tubularSegments) / radialSegments * Math.PI * 2;
-      // Animate radius with a sine wave for blobby effect
-      const blob = 0.08 * Math.sin(4 * u + time * 2 + 2 * Math.cos(v + time)) +
-                   0.04 * Math.cos(6 * v + time * 1.5);
-      const r = tubeRadius + blob;
-      // Torus parametric equations
-      const x = (torusRadius + r * Math.cos(v)) * Math.cos(u);
-      const y = (torusRadius + r * Math.cos(v)) * Math.sin(u);
-      const z = r * Math.sin(v);
-      positions.setXYZ(i, x, y, z);
-    }
-    positions.needsUpdate = true;
-    controls.update(); // update orbit controls
+    controls.update();
     renderer.render(scene, camera);
   };
 
@@ -118,8 +92,8 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const cleanup = () => {
     container.removeChild(renderer.domElement);
     renderer.dispose();
-    torusGeometry.dispose();
-    wireframeMaterial.dispose();
+    geometry.dispose();
+    material.dispose();
     controls.dispose();
   };
 
@@ -127,7 +101,7 @@ export const createScene = (container: HTMLElement): SceneSetup => {
     scene,
     camera,
     renderer,
-    blob: torus,
+    blob: mesh,
     animate,
     cleanup,
   };
