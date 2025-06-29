@@ -50,6 +50,7 @@ export const SceneForm: React.FC<SceneFormProps> = ({
   });
 
   const [copyStatus, setCopyStatus] = useState<string>("");
+  const [pasteStatus, setPasteStatus] = useState<string>("");
 
   // Sync camera parameters when current camera state changes
   useEffect(() => {
@@ -108,19 +109,57 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     }
   };
 
-  const extractCurrentCameraState = () => {
-    if (currentCameraState) {
-      const newParameters = {
-        ...parameters,
-        cameraPositionX: currentCameraState.position.x,
-        cameraPositionY: currentCameraState.position.y,
-        cameraPositionZ: currentCameraState.position.z,
-        cameraTargetX: currentCameraState.target.x,
-        cameraTargetY: currentCameraState.target.y,
-        cameraTargetZ: currentCameraState.target.z,
-      };
+  const pasteFromClipboard = async () => {
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+      const parsedData = JSON.parse(clipboardText);
+      
+      // Handle both the full object format and just sceneParameters
+      let newParameters: SceneParameters;
+      let newCameraState: CameraState | undefined;
+      
+      if (parsedData.sceneParameters && parsedData.cameraState) {
+        // Full format with both sceneParameters and cameraState
+        newParameters = parsedData.sceneParameters;
+        newCameraState = parsedData.cameraState;
+      } else if (parsedData.sceneParameters) {
+        // Just sceneParameters
+        newParameters = parsedData.sceneParameters;
+      } else if (parsedData.gridWidth !== undefined) {
+        // Direct parameters object
+        newParameters = parsedData;
+      } else {
+        throw new Error("Invalid format");
+      }
+      
+      // Validate that all required parameters are present
+      const requiredParams = [
+        'gridWidth', 'gridHeight', 'arcReach', 'twistX', 'twistY', 'twistZ', 'twistNoise',
+        'cameraPositionX', 'cameraPositionY', 'cameraPositionZ',
+        'cameraTargetX', 'cameraTargetY', 'cameraTargetZ'
+      ];
+      
+      for (const param of requiredParams) {
+        if (typeof newParameters[param as keyof SceneParameters] !== 'number') {
+          throw new Error(`Missing or invalid parameter: ${param}`);
+        }
+      }
+      
+      // Apply the new parameters
       setParameters(newParameters);
       onParametersChange(newParameters);
+      
+      // Apply camera state if provided
+      if (newCameraState && onCameraStateChange) {
+        onCameraStateChange(newCameraState);
+      }
+      
+      setPasteStatus("Pasted!");
+      setTimeout(() => setPasteStatus(""), 2000);
+    } catch (error) {
+      console.error("Paste error:", error);
+      setPasteStatus("Invalid format");
+      setTimeout(() => setPasteStatus(""), 2000);
     }
   };
 
@@ -128,12 +167,6 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-white">Scene Parameters</h3>
-        <button
-          onClick={copyToClipboard}
-          className="px-3 py-1 text-sm bg-primary hover:bg-primary/80 text-white rounded transition-colors"
-        >
-          {copyStatus || "Copy Parameters"}
-        </button>
       </div>
       
       {/* Scene Parameters */}
@@ -339,12 +372,20 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
-        <button
-          onClick={extractCurrentCameraState}
-          className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-        >
-          Extract Current Camera
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={pasteFromClipboard}
+            className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+          >
+            {pasteStatus || "Paste Parameters"}
+          </button>
+          <button
+            onClick={copyToClipboard}
+            className="w-full px-3 py-2 text-sm bg-primary hover:bg-primary/80 text-white rounded transition-colors"
+          >
+            {copyStatus || "Copy Parameters"}
+          </button>
+        </div>
       </div>
     </div>
   );
