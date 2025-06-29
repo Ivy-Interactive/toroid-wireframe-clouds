@@ -64,6 +64,10 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   const [drawCalls, setDrawCalls] = useState(0);
   const statsRef = useRef<Stats | null>(null);
   const gridGroupRef = useRef<THREE.Group | null>(null);
+  const animationTimeRef = useRef<number>(0);
+  const parametersRef = useRef<SceneParameters | undefined>(parameters);
+  const lastTimeRef = useRef<number>(0);
+  const initialSphericalRef = useRef<{ radius: number, phi: number, theta: number } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -71,10 +75,78 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     // Create the Three.js scene
     sceneSetupRef.current = createScene(containerRef.current);
 
+    // Store initial spherical coordinates
+    const { camera, controls } = sceneSetupRef.current;
+    const offset = camera.position.clone().sub(controls.target);
+    const spherical = new THREE.Spherical().setFromVector3(offset);
+    initialSphericalRef.current = {
+      radius: spherical.radius,
+      phi: spherical.phi,
+      theta: spherical.theta,
+    };
+
     // Start animation loop
     const animate = () => {
       if (sceneSetupRef.current) {
         statsRef.current?.begin();
+        
+        // Handle animation parameters
+        if (parametersRef.current?.animationEnabled) {
+          const currentTime = Date.now();
+          const deltaTime = lastTimeRef.current === 0 ? 0 : (currentTime - lastTimeRef.current) / 1000; // Convert milliseconds to seconds
+          animationTimeRef.current += deltaTime;
+          lastTimeRef.current = currentTime;
+          
+          // Disable OrbitControls during animation to allow manual control
+          sceneSetupRef.current.controls.enabled = false;
+          
+          // Robust camera orbit animation
+          if (initialSphericalRef.current) {
+            const { camera, controls } = sceneSetupRef.current;
+            const time = animationTimeRef.current;
+            const { radius, phi: basePhi, theta: baseTheta } = initialSphericalRef.current;
+            const freq = 1; // Oscillation frequency (cycles per second)
+            // Create a smooth triangle wave that goes from -1 to 1 and back smoothly
+            const t = (freq * time) % 2; // 0 to 2 cycle
+            const triangleX = t < 1 ? 2 * t - 1 : 3 - 2 * t; // Smooth triangle wave
+            const triangleY = ((freq * time + 0.5) % 2) < 1 ? 
+              2 * ((freq * time + 0.5) % 1) - 1 : 
+              3 - 2 * ((freq * time + 0.5) % 1); // Offset by 0.5 for different phase
+            
+            let phi = basePhi + (parametersRef.current.cameraXrotPhi || 0) * triangleX;
+            let theta = baseTheta + (parametersRef.current.cameraYrotPhi || 0) * triangleY;
+            // Clamp phi to avoid poles
+            phi = Math.max(0.01, Math.min(Math.PI - 0.01, phi));
+            // Wrap theta
+            theta = theta % (2 * Math.PI);
+            const spherical = new THREE.Spherical(radius, phi, theta);
+            const offset = new THREE.Vector3().setFromSpherical(spherical);
+            camera.position.copy(controls.target).add(offset);
+            camera.lookAt(controls.target);
+          } else {
+            // If for some reason initialSphericalRef is null, recalculate it
+            const { camera, controls } = sceneSetupRef.current;
+            const offset = camera.position.clone().sub(controls.target);
+            const spherical = new THREE.Spherical().setFromVector3(offset);
+            initialSphericalRef.current = {
+              radius: spherical.radius,
+              phi: spherical.phi,
+              theta: spherical.theta,
+            };
+          }
+          
+          // Apply camera vertical offset (instead of moving mesh)
+          if (parametersRef.current.meshVerticalOffset !== 0) {
+            const { camera, controls } = sceneSetupRef.current;
+            const target = controls.target;
+            camera.position.y = target.y + parametersRef.current.meshVerticalOffset;
+            camera.lookAt(target);
+          }
+        } else {
+          // Re-enable OrbitControls when animation is disabled
+          sceneSetupRef.current.controls.enabled = true;
+        }
+        
         sceneSetupRef.current.animate();
         setDrawCalls(sceneSetupRef.current.renderer.info.render.calls);
         statsRef.current?.end();
@@ -148,6 +220,20 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
 
     return () => clearInterval(interval);
   }, [onCameraStateChange]);
+
+  // Handle animation parameter changes
+  useEffect(() => {
+    if (!parameters?.animationEnabled) {
+      animationTimeRef.current = 0;
+      lastTimeRef.current = 0;
+      initialSphericalRef.current = null;
+    }
+  }, [parameters?.animationEnabled]);
+
+  // Keep parametersRef updated
+  useEffect(() => {
+    parametersRef.current = parameters;
+  }, [parameters]);
 
   // Unified grid mesh generation
   useEffect(() => {

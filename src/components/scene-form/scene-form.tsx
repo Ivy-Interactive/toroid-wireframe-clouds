@@ -26,6 +26,12 @@ export interface SceneParameters {
   cameraTargetX: number;
   cameraTargetY: number;
   cameraTargetZ: number;
+  // Animation parameters
+  animationEnabled: boolean;
+  cameraXrotPhi: number;
+  cameraYrotPhi: number;
+  cameraZrotPhi: number;
+  meshVerticalOffset: number;
 }
 
 export const SceneForm: React.FC<SceneFormProps> = ({ 
@@ -47,6 +53,11 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     cameraTargetX: 0,
     cameraTargetY: 0,
     cameraTargetZ: 0,
+    animationEnabled: false,
+    cameraXrotPhi: 0,
+    cameraYrotPhi: 0,
+    cameraZrotPhi: 0,
+    meshVerticalOffset: 0,
   });
 
   const [copyStatus, setCopyStatus] = useState<string>("");
@@ -69,14 +80,14 @@ export const SceneForm: React.FC<SceneFormProps> = ({
 
   const handleChange = (
     key: keyof SceneParameters,
-    value: number
+    value: number | boolean
   ) => {
     const newParameters = { ...parameters, [key]: value };
     setParameters(newParameters);
     onParametersChange(newParameters);
     
     // Immediately apply camera changes if it's a camera parameter
-    if (key.startsWith('camera') && onCameraStateChange) {
+    if (key.startsWith('camera') && onCameraStateChange && typeof value === 'number') {
       const cameraState: CameraState = {
         position: {
           x: key === 'cameraPositionX' ? value : newParameters.cameraPositionX,
@@ -136,11 +147,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
       const requiredParams = [
         'gridWidth', 'gridHeight', 'arcReach', 'twistX', 'twistY', 'twistZ', 'twistNoise',
         'cameraPositionX', 'cameraPositionY', 'cameraPositionZ',
-        'cameraTargetX', 'cameraTargetY', 'cameraTargetZ'
+        'cameraTargetX', 'cameraTargetY', 'cameraTargetZ',
+        'animationEnabled', 'cameraXrotPhi', 'cameraYrotPhi', 'cameraZrotPhi', 'meshVerticalOffset'
       ];
       
       for (const param of requiredParams) {
-        if (typeof newParameters[param as keyof SceneParameters] !== 'number') {
+        const value = newParameters[param as keyof SceneParameters];
+        if (param === 'animationEnabled') {
+          if (typeof value !== 'boolean') {
+            throw new Error(`Missing or invalid parameter: ${param}`);
+          }
+        } else if (typeof value !== 'number') {
           throw new Error(`Missing or invalid parameter: ${param}`);
         }
       }
@@ -372,20 +389,97 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
-        <div className="space-y-2">
-          <button
-            onClick={pasteFromClipboard}
-            className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-          >
-            {pasteStatus || "Paste Parameters"}
-          </button>
-          <button
-            onClick={copyToClipboard}
-            className="w-full px-3 py-2 text-sm bg-primary hover:bg-primary/80 text-white rounded transition-colors"
-          >
-            {copyStatus || "Copy Parameters"}
-          </button>
+      </div>
+
+      {/* Animation Parameters */}
+      <div className="space-y-3">
+        <h4 className="text-md font-medium text-white/90">Animation Settings</h4>
+        <div className="space-y-1">
+          <label className="flex items-center space-x-2 text-sm font-medium text-white/80">
+            <input
+              type="checkbox"
+              checked={parameters.animationEnabled}
+              onChange={(e) => handleChange("animationEnabled", e.target.checked)}
+              className="w-4 h-4 text-primary bg-primary/20 border-primary/30 rounded focus:ring-primary focus:ring-2"
+            />
+            <span>Enable Animation</span>
+          </label>
         </div>
+        <div className="space-y-1">
+          <label htmlFor="cameraXrotPhi" className="block text-sm font-medium text-white/80">
+            Camera X Rotation Speed: {parameters.cameraXrotPhi.toFixed(2)}
+          </label>
+          <input
+            id="cameraXrotPhi"
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={parameters.cameraXrotPhi}
+            onChange={(e) => handleChange("cameraXrotPhi", parseFloat(e.target.value))}
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="cameraYrotPhi" className="block text-sm font-medium text-white/80">
+            Camera Y Rotation Speed: {parameters.cameraYrotPhi.toFixed(2)}
+          </label>
+          <input
+            id="cameraYrotPhi"
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={parameters.cameraYrotPhi}
+            onChange={(e) => handleChange("cameraYrotPhi", parseFloat(e.target.value))}
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="cameraZrotPhi" className="block text-sm font-medium text-white/80">
+            Camera Z Rotation Speed: {parameters.cameraZrotPhi.toFixed(2)}
+          </label>
+          <input
+            id="cameraZrotPhi"
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value={parameters.cameraZrotPhi}
+            onChange={(e) => handleChange("cameraZrotPhi", parseFloat(e.target.value))}
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="meshVerticalOffset" className="block text-sm font-medium text-white/80">
+            Camera Vertical Offset: {parameters.meshVerticalOffset.toFixed(2)}
+          </label>
+          <input
+            id="meshVerticalOffset"
+            type="range"
+            min="-10"
+            max="10"
+            step="0.1"
+            value={parameters.meshVerticalOffset}
+            onChange={(e) => handleChange("meshVerticalOffset", parseFloat(e.target.value))}
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <button
+          onClick={pasteFromClipboard}
+          className="w-full px-3 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+        >
+          {pasteStatus || "Paste Parameters"}
+        </button>
+        <button
+          onClick={copyToClipboard}
+          className="w-full px-3 py-2 text-sm bg-primary hover:bg-primary/80 text-white rounded transition-colors"
+        >
+          {copyStatus || "Copy Parameters"}
+        </button>
       </div>
     </div>
   );
