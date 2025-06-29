@@ -68,6 +68,15 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   const parametersRef = useRef<SceneParameters | undefined>(parameters);
   const lastTimeRef = useRef<number>(0);
   const initialSphericalRef = useRef<{ radius: number, phi: number, theta: number } | null>(null);
+  const animationStateRef = useRef<{ xDirection: number; yDirection: number; xOffset: number; yOffset: number; zDirection: number; zOffset: number }>({
+    xDirection: 1,
+    yDirection: 1,
+    xOffset: 0,
+    yOffset: 0,
+    zDirection: 1,
+    zOffset: 0
+  });
+  const wasAnimationEnabledRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -92,10 +101,18 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         
         // Handle animation parameters
         if (parametersRef.current?.animationEnabled) {
-          const currentTime = Date.now();
-          const deltaTime = lastTimeRef.current === 0 ? 0 : (currentTime - lastTimeRef.current) / 1000; // Convert milliseconds to seconds
+          const currentTime = performance.now();
+          const deltaTime = lastTimeRef.current === 0 ? 0 : (currentTime - lastTimeRef.current) / 1000;
           animationTimeRef.current += deltaTime;
           lastTimeRef.current = currentTime;
+          
+          // Reset animation state offsets when animation is first enabled
+          if (!wasAnimationEnabledRef.current) {
+            animationStateRef.current.xOffset = 0;
+            animationStateRef.current.yOffset = 0;
+            animationStateRef.current.zOffset = 0;
+            wasAnimationEnabledRef.current = true;
+          }
           
           // Disable OrbitControls during animation to allow manual control
           sceneSetupRef.current.controls.enabled = false;
@@ -103,26 +120,51 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
           // Robust camera orbit animation
           if (initialSphericalRef.current) {
             const { camera, controls } = sceneSetupRef.current;
-            const time = animationTimeRef.current;
-            const { radius, phi: basePhi, theta: baseTheta } = initialSphericalRef.current;
-            const freq = 1; // Oscillation frequency (cycles per second)
-            // Create a smooth triangle wave that goes from -1 to 1 and back smoothly
-            const t = (freq * time) % 2; // 0 to 2 cycle
-            const triangleX = t < 1 ? 2 * t - 1 : 3 - 2 * t; // Smooth triangle wave
-            const triangleY = ((freq * time + 0.5) % 2) < 1 ? 
-              2 * ((freq * time + 0.5) % 1) - 1 : 
-              3 - 2 * ((freq * time + 0.5) % 1); // Offset by 0.5 for different phase
             
-            let phi = basePhi + (parametersRef.current.cameraXrotPhi || 0) * triangleX;
-            let theta = baseTheta + (parametersRef.current.cameraYrotPhi || 0) * triangleY;
-            // Clamp phi to avoid poles
-            phi = Math.max(0.01, Math.min(Math.PI - 0.01, phi));
-            // Wrap theta
-            theta = theta % (2 * Math.PI);
-            const spherical = new THREE.Spherical(radius, phi, theta);
-            const offset = new THREE.Vector3().setFromSpherical(spherical);
-            camera.position.copy(controls.target).add(offset);
-            camera.lookAt(controls.target);
+            // State-based smooth animation
+            const speed = 1.0; // Units per second
+            const maxOffset = 2.0; // Maximum offset distance
+            
+            // Update X offset
+            animationStateRef.current.xOffset += animationStateRef.current.xDirection * speed * deltaTime;
+            if (Math.abs(animationStateRef.current.xOffset) >= maxOffset) {
+              animationStateRef.current.xDirection *= -1; // Reverse direction
+              animationStateRef.current.xOffset = Math.sign(animationStateRef.current.xOffset) * maxOffset;
+            }
+            
+            // Update Y offset (with phase offset)
+            animationStateRef.current.yOffset += animationStateRef.current.yDirection * speed * deltaTime;
+            if (Math.abs(animationStateRef.current.yOffset) >= maxOffset) {
+              animationStateRef.current.yDirection *= -1; // Reverse direction
+              animationStateRef.current.yOffset = Math.sign(animationStateRef.current.yOffset) * maxOffset;
+            }
+            
+            // Update Z rotation (roll)
+            const zRotationSpeed = 1.0; // Radians per second
+            const maxZRotation = Math.PI / 4; // 45 degrees max
+            animationStateRef.current.zOffset = (animationStateRef.current.zOffset || 0) + animationStateRef.current.zDirection * zRotationSpeed * deltaTime;
+            if (Math.abs(animationStateRef.current.zOffset || 0) >= maxZRotation) {
+              animationStateRef.current.zDirection *= -1; // Reverse direction
+              animationStateRef.current.zOffset = Math.sign(animationStateRef.current.zOffset || 0) * maxZRotation;
+            }
+            
+            // Apply oscillation to current camera position (not recalculated base)
+            const target = controls.target;
+            const currentX = camera.position.x;
+            const currentY = camera.position.y;
+            const currentZ = camera.position.z;
+            
+            const x = currentX + (parametersRef.current.cameraXrotPhi || 0) * animationStateRef.current.xOffset;
+            const y = currentY + (parametersRef.current.cameraYrotPhi || 0) * animationStateRef.current.yOffset;
+            const z = currentZ;
+            
+            camera.position.set(x, y, z);
+            camera.lookAt(target);
+            
+            // Apply Z rotation (roll) after positioning
+            if (parametersRef.current.cameraZrotPhi !== 0) {
+              camera.rotateZ((animationStateRef.current.zOffset || 0) * parametersRef.current.cameraZrotPhi);
+            }
           } else {
             // If for some reason initialSphericalRef is null, recalculate it
             const { camera, controls } = sceneSetupRef.current;
@@ -227,6 +269,16 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
       animationTimeRef.current = 0;
       lastTimeRef.current = 0;
       initialSphericalRef.current = null;
+      wasAnimationEnabledRef.current = false;
+      // Reset animation state
+      animationStateRef.current = {
+        xDirection: 1,
+        yDirection: 1,
+        xOffset: 0,
+        yOffset: 0,
+        zDirection: 1,
+        zOffset: 0
+      };
     }
   }, [parameters?.animationEnabled]);
 
