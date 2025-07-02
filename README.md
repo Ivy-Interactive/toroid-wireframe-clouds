@@ -18,7 +18,7 @@ This application renders interactive 3D plane-mesh wireframe structures with clo
 You can import this package directly from Git without publishing to npm:
 
 ```bash
-npm install git+https://github.com/yourusername/toroid-wireframe-clouds.git
+npm install git+https://github.com/Ivy-Interactive/toroid-wireframe-clouds.git
 ```
 
 Or add to your `package.json`:
@@ -26,7 +26,7 @@ Or add to your `package.json`:
 ```json
 {
   "dependencies": {
-    "toroid-wireframe-clouds": "git+https://github.com/yourusername/toroid-wireframe-clouds.git"
+    "toroid-wireframe-clouds": "git+https://Ivy-Interactive/yourusername/toroid-wireframe-clouds.git"
   }
 }
 ```
