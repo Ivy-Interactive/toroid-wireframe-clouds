@@ -11,6 +11,94 @@ This application renders interactive 3D plane-mesh wireframe structures with clo
 - Responsive design for various screen sizes
 - Performance-optimized rendering
 
+## Using as a Package
+
+### Import from Git (Recommended for Development)
+
+You can import this package directly from Git without publishing to npm:
+
+```bash
+npm install git+https://github.com/yourusername/toroid-wireframe-clouds.git
+```
+
+Or add to your `package.json`:
+
+```json
+{
+  "dependencies": {
+    "toroid-wireframe-clouds": "git+https://github.com/yourusername/toroid-wireframe-clouds.git"
+  }
+}
+```
+
+### Usage Examples
+
+#### Basic Scene Component
+
+```tsx
+import { MainScene } from 'toroid-wireframe-clouds';
+
+function App() {
+  return <MainScene />;
+}
+```
+
+#### Custom Three.js Scene
+
+```tsx
+import { ThreeScene, type SceneParameters } from 'toroid-wireframe-clouds';
+
+function MyScene() {
+  const parameters: SceneParameters = {
+    gridWidth: 10,
+    gridHeight: 10,
+    arcReach: 0.5,
+    twistX: 45,
+    twistY: 30,
+    twistZ: 15,
+    twistNoise: 0.2,
+    cameraPositionX: 0,
+    cameraPositionY: 0,
+    cameraPositionZ: 10,
+    cameraTargetX: 0,
+    cameraTargetY: 0,
+    cameraTargetZ: 0,
+  };
+
+  return (
+    <ThreeScene 
+      parameters={parameters}
+      onCameraStateChange={(cameraState) => console.log('Camera:', cameraState)}
+    />
+  );
+}
+```
+
+#### Programmatic Scene Creation
+
+```tsx
+import { createScene, type SceneSetup } from 'toroid-wireframe-clouds';
+
+const container = document.getElementById('scene-container');
+const sceneSetup: SceneSetup = createScene(container);
+
+// Start animation loop
+function animate() {
+  sceneSetup.animate();
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Cleanup when done
+sceneSetup.cleanup();
+```
+
+### Available Exports
+
+- **Components**: `MainScene`, `ThreeScene`, `SceneForm`, `StatsOverlay`, `DrawCallsOverlay`
+- **Functions**: `createScene`
+- **Types**: `SceneParameters`, `CameraState`, `SceneSetup`
+
 ## Getting Started
 
 ### Prerequisites
@@ -38,6 +126,12 @@ This application renders interactive 3D plane-mesh wireframe structures with clo
 
 ```bash
 npm run build
+```
+
+### Building Library Distribution
+
+```bash
+npm run build:lib
 ```
 
 The built files will be in the `dist` directory, ready for deployment.
