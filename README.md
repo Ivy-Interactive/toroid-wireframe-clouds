@@ -15,10 +15,10 @@ This application renders interactive 3D plane-mesh wireframe structures with clo
 
 ### Import from Git (Recommended for Development)
 
-You can import this package directly from Git without publishing to npm:
+You can import this package directly from Git without publishing to npm. The library is built and distributed from the `build` branch:
 
 ```bash
-npm install git+https://github.com/Ivy-Interactive/toroid-wireframe-clouds.git
+npm install git+https://github.com/Ivy-Interactive/toroid-wireframe-clouds.git#build
 ```
 
 Or add to your `package.json`:
@@ -26,7 +26,7 @@ Or add to your `package.json`:
 ```json
 {
   "dependencies": {
-    "toroid-wireframe-clouds": "git+https://Ivy-Interactive/yourusername/toroid-wireframe-clouds.git"
+    "toroid-wireframe-clouds": "git+https://github.com/Ivy-Interactive/toroid-wireframe-clouds.git#build"
   }
 }
 ```
@@ -134,7 +134,22 @@ npm run build
 npm run build:lib
 ```
 
-The built files will be in the `dist` directory, ready for deployment.
+The built files will be in the `dist` directory.
+
+### Deploying to Build Branch
+
+The library is automatically built and deployed to the `build` branch via GitHub Actions when you push to `main`. You can also manually trigger the build:
+
+```bash
+npm run deploy
+```
+
+This will:
+1. Build the library
+2. Switch to the `build` branch
+3. Copy the built files to the root
+4. Update package.json for distribution
+5. Commit and push to the `build` branch
 
 ## Project Structure
 

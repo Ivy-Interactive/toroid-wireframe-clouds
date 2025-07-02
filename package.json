@@ -18,6 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:lib": "tsc -p tsconfig.lib.json",
+    "deploy": "npm run build:lib && git checkout build && git rm -rf . && cp -r dist/* ./ && cp package.json README.md ./ && git add . && git commit -m \"Build library\" && git push origin build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
