@@ -1,4 +1,4 @@
-name: Build and Deploy Library
+name: Distribute Library
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build-and-distribute:
     runs-on: ubuntu-latest
     
     steps:
