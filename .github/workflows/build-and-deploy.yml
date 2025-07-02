@@ -43,10 +43,8 @@ jobs:
         # Copy dist contents to root
         cp -r dist/* ./
         
-        # Copy essential files for npm package
-        cp package.json ./
-        cp README.md ./
-        cp tsconfig.lib.json ./
+        # Copy essential files for npm package from main branch
+        git checkout main -- package.json README.md
         
         # Update package.json for build branch
         node -e "
