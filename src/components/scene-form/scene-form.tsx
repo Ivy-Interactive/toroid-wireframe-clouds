@@ -15,11 +15,11 @@ export interface CameraState {
 export interface SceneParameters {
   gridWidth: number;
   gridHeight: number;
-  arcReach: number;
-  twistX: number;
-  twistY: number;
-  twistZ: number;
-  twistNoise: number;
+  lineThickness: number; // Controls both Border and Ring thickness
+  nodeCount: number;
+  nodeSpeed: number;
+  nodeStrength: number;
+  nodePulse: number; // How much they "breathe" or affect
   cameraPositionX: number;
   cameraPositionY: number;
   cameraPositionZ: number;
@@ -28,22 +28,22 @@ export interface SceneParameters {
   cameraTargetZ: number;
 }
 
-export const SceneForm: React.FC<SceneFormProps> = ({ 
-  onParametersChange, 
+export const SceneForm: React.FC<SceneFormProps> = ({
+  onParametersChange,
   onCameraStateChange,
-  currentCameraState 
+  currentCameraState,
 }) => {
   const [parameters, setParameters] = useState<SceneParameters>({
-    gridWidth: 1,
-    gridHeight: 1,
-    arcReach: 0.0,
-    twistX: 0,
-    twistY: 0,
-    twistZ: 0,
-    twistNoise: 0,
+    gridWidth: 20,
+    gridHeight: 20,
+    lineThickness: 0.02,
+    nodeCount: 3,
+    nodeSpeed: 0.5,
+    nodeStrength: 1.0,
+    nodePulse: 0.5,
     cameraPositionX: 0,
     cameraPositionY: 0,
-    cameraPositionZ: 5,
+    cameraPositionZ: 50,
     cameraTargetX: 0,
     cameraTargetY: 0,
     cameraTargetZ: 0,
@@ -55,7 +55,7 @@ export const SceneForm: React.FC<SceneFormProps> = ({
   // Sync camera parameters when current camera state changes
   useEffect(() => {
     if (currentCameraState) {
-      setParameters(prev => ({
+      setParameters((prev) => ({
         ...prev,
         cameraPositionX: currentCameraState.position.x,
         cameraPositionY: currentCameraState.position.y,
@@ -67,28 +67,25 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     }
   }, [currentCameraState]);
 
-  const handleChange = (
-    key: keyof SceneParameters,
-    value: number
-  ) => {
+  const handleChange = (key: keyof SceneParameters, value: number) => {
     const newParameters = { ...parameters, [key]: value };
     setParameters(newParameters);
     onParametersChange(newParameters);
-    
+
     // Immediately apply camera changes if it's a camera parameter
-    if (key.startsWith('camera') && onCameraStateChange) {
+    if (key.startsWith("camera") && onCameraStateChange) {
       const cameraState: CameraState = {
         position: {
-          x: key === 'cameraPositionX' ? value : newParameters.cameraPositionX,
-          y: key === 'cameraPositionY' ? value : newParameters.cameraPositionY,
-          z: key === 'cameraPositionZ' ? value : newParameters.cameraPositionZ
+          x: key === "cameraPositionX" ? value : newParameters.cameraPositionX,
+          y: key === "cameraPositionY" ? value : newParameters.cameraPositionY,
+          z: key === "cameraPositionZ" ? value : newParameters.cameraPositionZ,
         },
         rotation: { x: 0, y: 0, z: 0 }, // Will be calculated from position and target
         target: {
-          x: key === 'cameraTargetX' ? value : newParameters.cameraTargetX,
-          y: key === 'cameraTargetY' ? value : newParameters.cameraTargetY,
-          z: key === 'cameraTargetZ' ? value : newParameters.cameraTargetZ
-        }
+          x: key === "cameraTargetX" ? value : newParameters.cameraTargetX,
+          y: key === "cameraTargetY" ? value : newParameters.cameraTargetY,
+          z: key === "cameraTargetZ" ? value : newParameters.cameraTargetZ,
+        },
       };
       onCameraStateChange(cameraState);
     }
@@ -98,7 +95,7 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     try {
       const dataToCopy = {
         sceneParameters: parameters,
-        cameraState: currentCameraState
+        cameraState: currentCameraState,
       };
       await navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
       setCopyStatus("Copied!");
@@ -113,11 +110,11 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     try {
       const clipboardText = await navigator.clipboard.readText();
       const parsedData = JSON.parse(clipboardText);
-      
+
       // Handle both the full object format and just sceneParameters
       let newParameters: SceneParameters;
       let newCameraState: CameraState | undefined;
-      
+
       if (parsedData.sceneParameters && parsedData.cameraState) {
         // Full format with both sceneParameters and cameraState
         newParameters = parsedData.sceneParameters;
@@ -131,29 +128,39 @@ export const SceneForm: React.FC<SceneFormProps> = ({
       } else {
         throw new Error("Invalid format");
       }
-      
+
       // Validate that all required parameters are present
       const requiredParams = [
-        'gridWidth', 'gridHeight', 'arcReach', 'twistX', 'twistY', 'twistZ', 'twistNoise',
-        'cameraPositionX', 'cameraPositionY', 'cameraPositionZ',
-        'cameraTargetX', 'cameraTargetY', 'cameraTargetZ'
+        "gridWidth",
+        "gridHeight",
+        "lineThickness",
+        "nodeCount",
+        "nodeSpeed",
+        "nodeStrength",
+        "nodePulse",
+        "cameraPositionX",
+        "cameraPositionY",
+        "cameraPositionZ",
+        "cameraTargetX",
+        "cameraTargetY",
+        "cameraTargetZ",
       ];
-      
+
       for (const param of requiredParams) {
-        if (typeof newParameters[param as keyof SceneParameters] !== 'number') {
+        if (typeof newParameters[param as keyof SceneParameters] !== "number") {
           throw new Error(`Missing or invalid parameter: ${param}`);
         }
       }
-      
+
       // Apply the new parameters
       setParameters(newParameters);
       onParametersChange(newParameters);
-      
+
       // Apply camera state if provided
       if (newCameraState && onCameraStateChange) {
         onCameraStateChange(newCameraState);
       }
-      
+
       setPasteStatus("Pasted!");
       setTimeout(() => setPasteStatus(""), 2000);
     } catch (error) {
@@ -168,12 +175,16 @@ export const SceneForm: React.FC<SceneFormProps> = ({
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-white">Scene Parameters</h3>
       </div>
-      
+
+      {/* Scene Parameters */}
       {/* Scene Parameters */}
       <div className="space-y-3">
         <h4 className="text-md font-medium text-white/90">Grid Settings</h4>
         <div className="space-y-1">
-          <label htmlFor="gridWidth" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="gridWidth"
+            className="block text-sm font-medium text-white/80"
+          >
             Grid Width: {parameters.gridWidth}
           </label>
           <input
@@ -183,12 +194,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="100"
             step="1"
             value={parameters.gridWidth}
-            onChange={(e) => handleChange("gridWidth", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("gridWidth", parseInt(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="gridHeight" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="gridHeight"
+            className="block text-sm font-medium text-white/80"
+          >
             Grid Height: {parameters.gridHeight}
           </label>
           <input
@@ -198,82 +214,114 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="100"
             step="1"
             value={parameters.gridHeight}
-            onChange={(e) => handleChange("gridHeight", parseInt(e.target.value))}
+            onChange={(e) =>
+              handleChange("gridHeight", parseInt(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="arcReach" className="block text-sm font-medium text-white/80">
-            Arc Reach: {parameters.arcReach.toFixed(2)}
+          <label
+            htmlFor="lineThickness"
+            className="block text-sm font-medium text-white/80"
+          >
+            Line Thickness: {parameters.lineThickness.toFixed(3)}
           </label>
           <input
-            id="arcReach"
+            id="lineThickness"
+            type="range"
+            min="0.001"
+            max="0.1"
+            step="0.001"
+            value={parameters.lineThickness}
+            onChange={(e) =>
+              handleChange("lineThickness", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+      </div>
+
+      {/* Node Parameters */}
+      <div className="space-y-3">
+        <h4 className="text-md font-medium text-white/90">Node Simulation</h4>
+        <div className="space-y-1">
+          <label
+            htmlFor="nodeCount"
+            className="block text-sm font-medium text-white/80"
+          >
+            Node Count: {parameters.nodeCount}
+          </label>
+          <input
+            id="nodeCount"
             type="range"
             min="0"
-            max="1"
-            step="0.01"
-            value={parameters.arcReach}
-            onChange={(e) => handleChange("arcReach", parseFloat(e.target.value))}
-            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="twistX" className="block text-sm font-medium text-white/80">
-            Twist X: {parameters.twistX}°
-          </label>
-          <input
-            id="twistX"
-            type="range"
-            min="-180"
-            max="180"
+            max="20"
             step="1"
-            value={parameters.twistX}
-            onChange={(e) => handleChange("twistX", parseInt(e.target.value))}
+            value={parameters.nodeCount}
+            onChange={(e) =>
+              handleChange("nodeCount", parseInt(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="twistY" className="block text-sm font-medium text-white/80">
-            Twist Y: {parameters.twistY}°
+          <label
+            htmlFor="nodeSpeed"
+            className="block text-sm font-medium text-white/80"
+          >
+            Node Speed: {parameters.nodeSpeed.toFixed(2)}
           </label>
           <input
-            id="twistY"
-            type="range"
-            min="-180"
-            max="180"
-            step="1"
-            value={parameters.twistY}
-            onChange={(e) => handleChange("twistY", parseInt(e.target.value))}
-            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="twistZ" className="block text-sm font-medium text-white/80">
-            Twist Z: {parameters.twistZ}°
-          </label>
-          <input
-            id="twistZ"
-            type="range"
-            min="-180"
-            max="180"
-            step="1"
-            value={parameters.twistZ}
-            onChange={(e) => handleChange("twistZ", parseInt(e.target.value))}
-            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="twistNoise" className="block text-sm font-medium text-white/80">
-            Twist Noise: {parameters.twistNoise.toFixed(2)}
-          </label>
-          <input
-            id="twistNoise"
+            id="nodeSpeed"
             type="range"
             min="0"
-            max="1"
+            max="5"
+            step="0.1"
+            value={parameters.nodeSpeed}
+            onChange={(e) =>
+              handleChange("nodeSpeed", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor="nodeStrength"
+            className="block text-sm font-medium text-white/80"
+          >
+            Node Strength: {parameters.nodeStrength.toFixed(2)}
+          </label>
+          <input
+            id="nodeStrength"
+            type="range"
+            min="0"
+            max="5"
+            step="0.1"
+            value={parameters.nodeStrength}
+            onChange={(e) =>
+              handleChange("nodeStrength", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor="nodePulse"
+            className="block text-sm font-medium text-white/80"
+          >
+            Node Pulse: {parameters.nodePulse.toFixed(2)}
+          </label>
+          <input
+            id="nodePulse"
+            type="range"
+            min="0"
+            max="2"
             step="0.01"
-            value={parameters.twistNoise}
-            onChange={(e) => handleChange("twistNoise", parseFloat(e.target.value))}
+            value={parameters.nodePulse}
+            onChange={(e) =>
+              handleChange("nodePulse", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
@@ -283,7 +331,10 @@ export const SceneForm: React.FC<SceneFormProps> = ({
       <div className="space-y-3">
         <h4 className="text-md font-medium text-white/90">Camera Settings</h4>
         <div className="space-y-1">
-          <label htmlFor="cameraPositionX" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraPositionX"
+            className="block text-sm font-medium text-white/80"
+          >
             Camera X: {parameters.cameraPositionX.toFixed(2)}
           </label>
           <input
@@ -293,12 +344,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraPositionX}
-            onChange={(e) => handleChange("cameraPositionX", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraPositionX", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="cameraPositionY" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraPositionY"
+            className="block text-sm font-medium text-white/80"
+          >
             Camera Y: {parameters.cameraPositionY.toFixed(2)}
           </label>
           <input
@@ -308,12 +364,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraPositionY}
-            onChange={(e) => handleChange("cameraPositionY", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraPositionY", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="cameraPositionZ" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraPositionZ"
+            className="block text-sm font-medium text-white/80"
+          >
             Camera Z: {parameters.cameraPositionZ.toFixed(2)}
           </label>
           <input
@@ -323,12 +384,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraPositionZ}
-            onChange={(e) => handleChange("cameraPositionZ", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraPositionZ", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="cameraTargetX" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraTargetX"
+            className="block text-sm font-medium text-white/80"
+          >
             Target X: {parameters.cameraTargetX.toFixed(2)}
           </label>
           <input
@@ -338,12 +404,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraTargetX}
-            onChange={(e) => handleChange("cameraTargetX", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraTargetX", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="cameraTargetY" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraTargetY"
+            className="block text-sm font-medium text-white/80"
+          >
             Target Y: {parameters.cameraTargetY.toFixed(2)}
           </label>
           <input
@@ -353,12 +424,17 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraTargetY}
-            onChange={(e) => handleChange("cameraTargetY", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraTargetY", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="cameraTargetZ" className="block text-sm font-medium text-white/80">
+          <label
+            htmlFor="cameraTargetZ"
+            className="block text-sm font-medium text-white/80"
+          >
             Target Z: {parameters.cameraTargetZ.toFixed(2)}
           </label>
           <input
@@ -368,7 +444,9 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             max="20"
             step="0.1"
             value={parameters.cameraTargetZ}
-            onChange={(e) => handleChange("cameraTargetZ", parseFloat(e.target.value))}
+            onChange={(e) =>
+              handleChange("cameraTargetZ", parseFloat(e.target.value))
+            }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>

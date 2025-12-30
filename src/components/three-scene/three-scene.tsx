@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import { createScene } from "../../layouts/main-scene";
-import type { SceneSetup } from "../../layouts/main-scene";
-import { StatsOverlay } from "../stats-overlay";
-import { DrawCallsOverlay } from "../draw-calls-overlay";
+import React, { useRef, useEffect } from "react";
 import Stats from "stats.js";
-import type { SceneParameters, CameraState } from "../scene-form";
+import type { SceneParameters } from "../scene-form/scene-form";
+import {
+  type CameraState,
+  createScene,
+  type SceneSetup,
+} from "../../layouts/main-scene/scene-initiation";
 import * as THREE from "three";
 
 interface ThreeSceneProps {
@@ -14,43 +15,128 @@ interface ThreeSceneProps {
   currentCameraState?: CameraState;
 }
 
-// Minimal 2D Perlin noise implementation
-function fade(t: number) {
-  return t * t * t * (t * (t * 6 - 15) + 10);
-}
-function lerp(a: number, b: number, t: number) {
-  return a + t * (b - a);
-}
-function grad(hash: number, x: number, y: number) {
-  const h = hash & 3;
-  const u = h < 2 ? x : y;
-  const v = h < 2 ? y : x;
-  return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
-}
-const perm = new Uint8Array(512);
-for (let i = 0; i < 256; i++) perm[i] = i;
-for (let i = 0; i < 256; i++) {
-  const j = (Math.random() * 256) | 0;
-  [perm[i], perm[j]] = [perm[j], perm[i]];
-}
-for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
-function perlin2(x: number, y: number) {
-  const X = Math.floor(x) & 255;
-  const Y = Math.floor(y) & 255;
-  x -= Math.floor(x);
-  y -= Math.floor(y);
-  const u = fade(x);
-  const v = fade(y);
-  const aa = perm[X + perm[Y]];
-  const ab = perm[X + perm[Y + 1]];
-  const ba = perm[X + 1 + perm[Y]];
-  const bb = perm[X + 1 + perm[Y + 1]];
-  return lerp(
-    lerp(grad(aa, x, y), grad(ba, x - 1, y), u),
-    lerp(grad(ab, x, y - 1), grad(bb, x - 1, y - 1), u),
-    v
-  );
-}
+// Vertex Shader
+const vertexShader = `
+  uniform float uTime;
+  uniform float uGridWidth;
+  uniform float uGridHeight;
+  uniform float uNodeCount;
+  uniform float uNodeSpeed;
+  uniform float uNodeStrength;
+  uniform float uNodePulse;
+  
+  // Instance attributes
+  attribute vec3 instanceOffset;
+  attribute vec2 instanceUv; // Store grid coord (ix, iy) here
+
+  varying vec2 vUv;
+  varying vec3 vPos;
+  varying float vDistortion;
+
+  // Simplex Noise (optional, or just use sin/cos for nodes)
+  // We'll simulate "nodes" as moving points in space
+  
+  vec3 getNodePos(float i) {
+    float t = uTime * uNodeSpeed * 0.5 + i * 10.0;
+    // Nodes move in a large volume
+    return vec3(
+      sin(t * 0.7) * uGridWidth * 0.5,
+      cos(t * 0.5) * uGridHeight * 0.5,
+      sin(t * 1.1) * 5.0
+    );
+  }
+
+  void main() {
+    vUv = uv;
+    vec3 pos = position + instanceOffset; // Local pos + offset
+    vec3 finalPos = pos;
+    
+    // Node Influence
+    float totalDistortion = 0.0;
+    
+    for(float i = 0.0; i < 20.0; i++) {
+        if (i >= uNodeCount) break;
+        
+        vec3 nodePos = getNodePos(i);
+        float dist = distance(pos, nodePos);
+        
+        // Influence strength drops with distance
+        // "Twisted around nodes"
+        
+        float influence = smoothstep(8.0 + uNodePulse * 2.0 * sin(uTime + i), 0.0, dist);
+        
+        // Apply twist/pull
+        // Rotate around Z based on influence
+        float angle = influence * uNodeStrength * (1.0 + uNodePulse * sin(uTime * 2.0));
+        
+        float s = sin(angle);
+        float c = cos(angle);
+        
+        // Rotate around node center? Or just simple twist
+        // Let's rotate the difference vector
+        vec3 delta = finalPos - nodePos;
+        
+        // 2D rotation for Z twist, 3D is harder to control without looking messy
+        // Let's try a 3D curl or just pull towards node
+        
+        // Simple attractor/repulsor with twist
+        // Move towards node
+        // finalPos += normalize(delta) * influence * 2.0 * sin(uTime); 
+        
+        // Z-displacement (wave)
+        finalPos.z += influence * 5.0 * sin(dist * 0.8 - uTime * 2.0) * uNodeStrength;
+        
+        totalDistortion += influence;
+    }
+    
+    vPos = finalPos;
+    vDistortion = totalDistortion;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
+  }
+`;
+
+// Fragment Shader
+const fragmentShader = `
+  uniform float uTime;
+  uniform float uLineThickness;
+  uniform vec3 uColor;
+
+  varying vec2 vUv;
+  varying float vDistortion;
+
+  void main() {
+    // Standard UV 0..1
+    vec2 uv = vUv;
+    
+    // Line Thickness from uniform (used for both border and ring)
+    float thickness = uLineThickness;
+
+    // Borders
+    // Draw a thin line at the edges
+    vec2 border = step(vec2(thickness), uv) * step(uv, vec2(1.0 - thickness));
+    float isContent = border.x * border.y;
+    float isBorder = 1.0 - isContent;
+
+    // Quarter Ring calculation
+    float dist = length(uv);
+    float radius = 1.0; 
+    
+    // Make the ring consistent width
+    float shape = 1.0 - smoothstep(thickness, thickness + 0.01, abs(dist - radius + thickness/2.0));
+    
+    // Combine Border and Ring
+    float alpha = max(isBorder, shape);
+    
+    vec3 color = uColor;
+    // Add blueish glow on distortion
+    color += vec3(0.2, 0.5, 1.0) * vDistortion * 0.5;
+
+    if (alpha < 0.1) discard;
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
 
 export const ThreeScene: React.FC<ThreeSceneProps> = ({
   className,
@@ -61,29 +147,41 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneSetupRef = useRef<SceneSetup | null>(null);
   const animationIdRef = useRef<number | null>(null);
-  const [drawCalls, setDrawCalls] = useState(0);
   const statsRef = useRef<Stats | null>(null);
-  const gridGroupRef = useRef<THREE.Group | null>(null);
+  const meshRef = useRef<THREE.InstancedMesh | null>(null);
+  const uniformsRef = useRef<any>(null);
 
+  // Initialize Scene
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Create the Three.js scene
     sceneSetupRef.current = createScene(containerRef.current);
 
-    // Start animation loop
+    // Stats
+    statsRef.current = new Stats();
+    statsRef.current.showPanel(0); // 0: fps, 1: ms
+    containerRef.current.appendChild(statsRef.current.dom);
+    statsRef.current.dom.style.position = "absolute";
+    statsRef.current.dom.style.top = "0px";
+    statsRef.current.dom.style.left = "0px";
+
     const animate = () => {
       if (sceneSetupRef.current) {
         statsRef.current?.begin();
+
+        // Update Uniforms
+        if (uniformsRef.current) {
+          uniformsRef.current.uTime.value = performance.now() / 1000;
+        }
+
         sceneSetupRef.current.animate();
-        setDrawCalls(sceneSetupRef.current.renderer.info.render.calls);
         statsRef.current?.end();
       }
       animationIdRef.current = requestAnimationFrame(animate);
     };
     animate();
 
-    // Handle resize
+    // Standard resize handling (same as before)
     const handleResize = () => {
       if (sceneSetupRef.current && containerRef.current) {
         const { camera, renderer } = sceneSetupRef.current;
@@ -93,225 +191,155 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height, false);
-        const canvas = renderer.domElement;
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
-        canvas.style.maxWidth = `${width}px`;
-        canvas.style.maxHeight = `${height}px`;
-        canvas.style.minWidth = `${width}px`;
-        canvas.style.minHeight = `${height}px`;
-        renderer.render(sceneSetupRef.current.scene, camera);
       }
     };
-    handleResize();
-    const resizeObserver = new ResizeObserver(() => {
-      handleResize();
-    });
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-    let resizeTimeout: number;
-    const debouncedResize = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(handleResize, 16);
-    };
-    window.addEventListener("resize", debouncedResize);
+    const resizeObserver = new ResizeObserver(() => handleResize());
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+
     return () => {
-      if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current);
-      }
-      if (sceneSetupRef.current) {
-        sceneSetupRef.current.cleanup();
-      }
-      window.removeEventListener("resize", debouncedResize);
+      if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
+      if (sceneSetupRef.current) sceneSetupRef.current.cleanup();
       resizeObserver.disconnect();
+      if (statsRef.current)
+        containerRef.current?.removeChild(statsRef.current.dom);
     };
   }, []);
 
-  // Handle camera state changes
+  // Update Geometry (InstancedMesh)
+  useEffect(() => {
+    if (!sceneSetupRef.current) return;
+    const scene = sceneSetupRef.current.scene;
+
+    // Dispose old mesh
+    if (meshRef.current) {
+      scene.remove(meshRef.current);
+      meshRef.current.geometry.dispose();
+      (meshRef.current.material as THREE.Material).dispose();
+    }
+
+    const width = parameters?.gridWidth ?? 20;
+    const height = parameters?.gridHeight ?? 20;
+    const count = width * height;
+
+    // Geometry for a single square
+    const geometry = new THREE.PlaneGeometry(1, 1);
+
+    // Shader Material
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        uTime: { value: 0 },
+        uGridWidth: { value: width },
+        uGridHeight: { value: height },
+        uColor: { value: new THREE.Color(0x00ff99) },
+        uLineThickness: { value: parameters?.lineThickness ?? 0.02 }, // Default thinner
+        uNodeCount: { value: parameters?.nodeCount ?? 3 },
+        uNodeSpeed: { value: parameters?.nodeSpeed ?? 0.5 },
+        uNodeStrength: { value: parameters?.nodeStrength ?? 1.0 },
+        uNodePulse: { value: parameters?.nodePulse ?? 0.5 },
+      },
+      transparent: true,
+      side: THREE.DoubleSide,
+      // depthWrite: false, // Maybe needed for transparency overlap?
+    });
+
+    uniformsRef.current = material.uniforms;
+
+    // Instanced Mesh
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+    // Initialize Instanced Attributes
+    // We need offsets to position them in a grid
+    const offsets = new Float32Array(count * 3);
+
+    // Make them connected: spacing = size = 1.0
+    const cellSize = 1.0;
+
+    for (let iy = 0; iy < height; iy++) {
+      for (let ix = 0; ix < width; ix++) {
+        const i = iy * width + ix;
+
+        // Centered Grid
+        const x = (ix - width / 2) * cellSize + cellSize / 2;
+        const y = (iy - height / 2) * cellSize + cellSize / 2;
+        const z = 0;
+
+        offsets[i * 3 + 0] = x;
+        offsets[i * 3 + 1] = y;
+        offsets[i * 3 + 2] = z;
+
+        // Set dummy matrix (identity) because we use GLSL to position
+        const dummy = new THREE.Object3D();
+        dummy.position.set(0, 0, 0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      }
+    }
+
+    geometry.setAttribute(
+      "instanceOffset",
+      new THREE.InstancedBufferAttribute(offsets, 3)
+    );
+
+    mesh.instanceMatrix.needsUpdate = true;
+
+    scene.add(mesh);
+    meshRef.current = mesh;
+  }, [
+    parameters?.gridWidth,
+    parameters?.gridHeight,
+    // Re-create mesh on grid size change
+    // Other parameters are uniforms, updated below
+  ]);
+
+  // Update Uniforms without re-creating mesh
+  useEffect(() => {
+    if (uniformsRef.current && parameters) {
+      uniformsRef.current.uLineThickness.value = parameters.lineThickness;
+      uniformsRef.current.uNodeCount.value = parameters.nodeCount;
+      uniformsRef.current.uNodeSpeed.value = parameters.nodeSpeed;
+      uniformsRef.current.uNodeStrength.value = parameters.nodeStrength;
+      uniformsRef.current.uNodePulse.value = parameters.nodePulse;
+    }
+  }, [
+    parameters?.lineThickness,
+    parameters?.nodeCount,
+    parameters?.nodeSpeed,
+    parameters?.nodeStrength,
+    parameters?.nodePulse,
+  ]);
+
+  // Sync Camera
   useEffect(() => {
     if (sceneSetupRef.current && currentCameraState) {
       sceneSetupRef.current.setCameraState(currentCameraState);
     }
   }, [currentCameraState]);
 
-  // Extract camera state periodically and notify parent
+  // Read Camera
   useEffect(() => {
     if (!sceneSetupRef.current || !onCameraStateChange) return;
-
     const interval = setInterval(() => {
       if (sceneSetupRef.current) {
-        const cameraState = sceneSetupRef.current.getCameraState();
-        onCameraStateChange(cameraState);
+        onCameraStateChange(sceneSetupRef.current.getCameraState());
       }
-    }, 100); // Update every 100ms
-
+    }, 100);
     return () => clearInterval(interval);
   }, [onCameraStateChange]);
 
-  // Unified grid mesh generation
-  useEffect(() => {
-    if (!sceneSetupRef.current) return;
-    const scene = sceneSetupRef.current.scene;
-    // Remove old group if exists
-    if (gridGroupRef.current) {
-      scene.remove(gridGroupRef.current);
-      gridGroupRef.current.children.forEach((child: THREE.Object3D) => {
-        if ('geometry' in child && child.geometry) (child.geometry as THREE.BufferGeometry).dispose();
-        if ('material' in child && child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m: THREE.Material) => m.dispose());
-          } else {
-            (child.material as THREE.Material).dispose();
-          }
-        }
-      });
-    }
-    // Unified grid mesh generation
-    const width = parameters?.gridWidth ?? 1;
-    const height = parameters?.gridHeight ?? 1;
-    const twistX = (parameters?.twistX ?? 0) * Math.PI / 180;
-    const twistY = (parameters?.twistY ?? 0) * Math.PI / 180;
-    const twistZ = (parameters?.twistZ ?? 0) * Math.PI / 180;
-    const twistNoise = parameters?.twistNoise ?? 0;
-    const arcReach = parameters?.arcReach ?? 0.0;
-    const cellSize = 3.0;
-    const totalWidth = width * cellSize;
-    const totalHeight = height * cellSize;
-    const gridRows = height + 1;
-    const gridCols = width + 1;
-    // Build unified grid of vertices
-    const vertices2D: THREE.Vector3[][] = [];
-    for (let iy = 0; iy < gridRows; iy++) {
-      const row: THREE.Vector3[] = [];
-      for (let ix = 0; ix < gridCols; ix++) {
-        // Normalized grid coordinates (0..1)
-        const u = ix / (gridCols - 1);
-        const v = iy / (gridRows - 1);
-        // Plane position, centered
-        const x = lerp(-totalWidth / 2, totalWidth / 2, u);
-        const y = lerp(-totalHeight / 2, totalHeight / 2, v);
-        const z = 0;
-        const pos = new THREE.Vector3(x, y, z);
-        // Progressive twist
-        const t = v; // 0 at bottom, 1 at top
-        const angleX = twistX * t;
-        const angleY = twistY * t;
-        const angleZ = twistZ * t;
-        // Move to center
-        pos.sub(new THREE.Vector3(0, 0, 0));
-        // Z twist
-        if (angleZ !== 0) {
-          const cosZ = Math.cos(angleZ);
-          const sinZ = Math.sin(angleZ);
-          const px = pos.x * cosZ - pos.y * sinZ;
-          const py = pos.x * sinZ + pos.y * cosZ;
-          pos.x = px;
-          pos.y = py;
-        }
-        // Y twist
-        if (angleY !== 0) {
-          const cosY = Math.cos(angleY);
-          const sinY = Math.sin(angleY);
-          const px = pos.x * cosY + pos.z * sinY;
-          const pz = -pos.x * sinY + pos.z * cosY;
-          pos.x = px;
-          pos.z = pz;
-        }
-        // X twist
-        if (angleX !== 0) {
-          const cosX = Math.cos(angleX);
-          const sinX = Math.sin(angleX);
-          const py = pos.y * cosX - pos.z * sinX;
-          const pz = pos.y * sinX + pos.z * cosX;
-          pos.y = py;
-          pos.z = pz;
-        }
-        // Move back from center
-        pos.add(new THREE.Vector3(0, 0, 0));
-        // Perlin noise
-        if (twistNoise > 0) {
-          const noise = perlin2(x * 0.5, y * 0.5);
-          pos.z += noise * twistNoise * cellSize * 0.5;
-        }
-        row.push(pos);
-      }
-      vertices2D.push(row);
-    }
-    // Build line segments (horizontal and vertical)
-    const lines: number[] = [];
-    for (let iy = 0; iy < gridRows; iy++) {
-      for (let ix = 0; ix < gridCols; ix++) {
-        // Horizontal line (to right neighbor)
-        if (ix < gridCols - 1) {
-          const a = vertices2D[iy][ix];
-          const b = vertices2D[iy][ix + 1];
-          lines.push(a.x, a.y, a.z, b.x, b.y, b.z);
-        }
-        // Vertical line (to top neighbor)
-        if (iy < gridRows - 1) {
-          const a = vertices2D[iy][ix];
-          const b = vertices2D[iy + 1][ix];
-          lines.push(a.x, a.y, a.z, b.x, b.y, b.z);
-        }
-      }
-    }
-    // Add arc/diagonal for each cell
-    const arcSegments = 32;
-    for (let iy = 0; iy < gridRows - 1; iy++) {
-      for (let ix = 0; ix < gridCols - 1; ix++) {
-        // Cell corners
-        const p0 = vertices2D[iy][ix]; // bottom-left
-        const p2 = vertices2D[iy + 1][ix + 1]; // top-right
-        const p3 = vertices2D[iy + 1][ix]; // top-left
-        // Quadratic Bézier control point: interpolate between diagonal midpoint and top-left
-        const mid = new THREE.Vector3((p0.x + p2.x) / 2, (p0.y + p2.y) / 2, (p0.z + p2.z) / 2);
-        const control = new THREE.Vector3(
-          mid.x * (1 - arcReach) + p3.x * arcReach,
-          mid.y * (1 - arcReach) + p3.y * arcReach,
-          mid.z * (1 - arcReach) + p3.z * arcReach
-        );
-        // Sample points along the quadratic Bézier curve
-        let prevPt: THREE.Vector3 | null = null;
-        for (let i = 0; i <= arcSegments; i++) {
-          const t = i / arcSegments;
-          // Quadratic Bézier formula
-          const x = (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * control.x + t * t * p2.x;
-          const y = (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * control.y + t * t * p2.y;
-          const z = (1 - t) * (1 - t) * p0.z + 2 * (1 - t) * t * control.z + t * t * p2.z;
-          const arcPt = new THREE.Vector3(x, y, z);
-          if (prevPt) {
-            lines.push(prevPt.x, prevPt.y, prevPt.z, arcPt.x, arcPt.y, arcPt.z);
-          }
-          prevPt = arcPt;
-        }
-      }
-    }
-    const mergedPositions = new Float32Array(lines);
-    const mergedGeometry = new THREE.BufferGeometry();
-    mergedGeometry.setAttribute('position', new THREE.BufferAttribute(mergedPositions, 3));
-    const material = new THREE.LineBasicMaterial({ color: 0x00ff99 });
-    const mergedMesh = new THREE.LineSegments(mergedGeometry, material);
-    // Add to scene as a group for cleanup compatibility
-    const group = new THREE.Group();
-    group.add(mergedMesh);
-    scene.add(group);
-    gridGroupRef.current = group;
-  }, [parameters?.gridWidth, parameters?.gridHeight, parameters?.twistX, parameters?.twistY, parameters?.twistZ, parameters?.twistNoise, parameters?.arcReach]);
-
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className={className}
-      style={{ 
+      style={{
         position: "relative",
         overflow: "hidden",
         width: "100%",
         height: "100%",
       }}
     >
-      <StatsOverlay statsRef={statsRef} />
-      <DrawCallsOverlay drawCalls={drawCalls} />
+      {/* Overlay logic could go here */}
     </div>
   );
 };

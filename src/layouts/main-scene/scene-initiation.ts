@@ -33,14 +33,15 @@ export const createScene = (container: HTMLElement): SceneSetup => {
 
   // Create renderer
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(container.clientWidth, container.clientHeight, false);
   renderer.setClearColor(0x1a1a2e, 1);
-  
+
   const canvas = renderer.domElement;
   canvas.style.width = `${container.clientWidth}px`;
   canvas.style.height = `${container.clientHeight}px`;
-  canvas.style.display = 'block';
-  
+  canvas.style.display = "block";
+
   container.appendChild(renderer.domElement);
 
   // --- Custom Curved Diagonal Square Geometry ---
@@ -64,18 +65,18 @@ export const createScene = (container: HTMLElement): SceneSetup => {
       position: {
         x: camera.position.x,
         y: camera.position.y,
-        z: camera.position.z
+        z: camera.position.z,
       },
       rotation: {
         x: camera.rotation.x,
         y: camera.rotation.y,
-        z: camera.rotation.z
+        z: camera.rotation.z,
       },
       target: {
         x: controls.target.x,
         y: controls.target.y,
-        z: controls.target.z
-      }
+        z: controls.target.z,
+      },
     };
   };
 
