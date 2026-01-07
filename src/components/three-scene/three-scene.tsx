@@ -72,28 +72,58 @@ const vertexShader = `
     return flow * uAttractorStrength;
   }
 
+  // Calculate Z deformation based on position and flow field
+  // This creates a more pronounced 3D effect
+  float getZDeformation(vec2 pos, vec2 flow, float time) {
+    // Use the flow magnitude as base
+    float flowMag = length(flow);
+    
+    // Add position-based Z deformation using attractor formula directly
+    float scale = 0.15;
+    float x = pos.x * scale;
+    float y = pos.y * scale;
+    
+    // Create Z deformation using attractor pattern
+    float z1 = sin(uParamsA.x * y + time * 0.5) - cos(uParamsA.y * x + time * 0.3);
+    float z2 = sin(uParamsB.x * x + time * 0.4) - cos(uParamsB.y * y + time * 0.6);
+    
+    // Combine Z components
+    float zDeform = (z1 + z2) * 0.5;
+    
+    // Combine flow-based and position-based Z deformation
+    float z = flowMag * 2.0 + zDeform * 3.0;
+    
+    return z;
+  }
+
   void main() {
     vUv = uv;
     
-    // Base position in grid
-    vec3 pos = position + instanceOffset;
+    // Base position: vertex position in world space (before deformation)
+    vec3 basePos = position + instanceOffset;
     
-    // Get world position for attractor calculation
-    vec2 worldPos = vec2(pos.x, pos.y);
+    // Get world position for attractor calculation (use actual vertex position)
+    // This ensures connected squares deform together smoothly
+    vec2 worldPos = vec2(basePos.x, basePos.y);
     
-    // Calculate attractor flow field deformation
+    // Calculate attractor flow field deformation for this specific vertex
+    // Each vertex deforms based on its position, keeping the grid connected
     float time = uTime * uAttractorSpeed;
     vec2 flow = getAttractorFlowField(worldPos, time);
     
-    // Apply flow field deformation smoothly
-    // The flow vector tells us which direction to move this point
+    // Calculate Z deformation for pronounced 3D effect
+    float zDeform = getZDeformation(worldPos, flow, time);
+    
+    // Apply flow field deformation to this vertex
+    // This ensures connected squares "stretch" together as a continuous mesh
     float flowMag = length(flow);
     
-    // Apply deformation with smooth interpolation
+    // Deform the vertex position - each vertex deforms based on its world position
+    // This keeps squares connected and allows them to "stretch" together in 3D
     vec3 finalPos = vec3(
-      pos.x + flow.x,
-      pos.y + flow.y,
-      pos.z + smoothstep(0.0, 1.0, flowMag) * 0.5 // Add Z depth based on flow magnitude with smooth interpolation
+      basePos.x + flow.x,
+      basePos.y + flow.y,
+      basePos.z + zDeform // Add pronounced Z depth for true 3D deformation
     );
     
     // Calculate distortion intensity for coloring
@@ -280,9 +310,10 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
       for (let ix = 0; ix < width; ix++) {
         const i = iy * width + ix;
 
-        // Centered Grid
-        const x = (ix - width / 2) * cellSize + cellSize / 2;
-        const y = (iy - height / 2) * cellSize + cellSize / 2;
+        // Centered Grid - squares are connected (edges touch)
+        // Each square is 1x1, so centers should be 1.0 apart
+        const x = (ix - (width - 1) / 2) * cellSize;
+        const y = (iy - (height - 1) / 2) * cellSize;
         const z = 0;
 
         offsets[i * 3 + 0] = x;
