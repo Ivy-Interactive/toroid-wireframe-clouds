@@ -12,14 +12,23 @@ export interface CameraState {
   target: { x: number; y: number; z: number };
 }
 
+export type VisualizationMode = "grid-deformation";
+
 export interface SceneParameters {
+  // Visualization mode
+  visualizationMode: VisualizationMode;
+  // Grid parameters
   gridWidth: number;
   gridHeight: number;
   lineThickness: number; // Controls both Border and Ring thickness
-  nodeCount: number;
-  nodeSpeed: number;
-  nodeStrength: number;
-  nodePulse: number; // How much they "breathe" or affect
+  // Attractor parameters for GPU deformation
+  paramA: number; // De Jong parameter a
+  paramB: number; // De Jong parameter b
+  paramC: number; // De Jong parameter c
+  paramD: number; // De Jong parameter d
+  attractorStrength: number; // How strong the deformation is
+  attractorSpeed: number; // Animation speed
+  // Camera parameters
   cameraPositionX: number;
   cameraPositionY: number;
   cameraPositionZ: number;
@@ -34,13 +43,16 @@ export const SceneForm: React.FC<SceneFormProps> = ({
   currentCameraState,
 }) => {
   const [parameters, setParameters] = useState<SceneParameters>({
+    visualizationMode: "grid-deformation",
     gridWidth: 20,
     gridHeight: 20,
     lineThickness: 0.02,
-    nodeCount: 3,
-    nodeSpeed: 0.5,
-    nodeStrength: 1.0,
-    nodePulse: 0.5,
+    paramA: -2.24,
+    paramB: 0.43,
+    paramC: -0.65,
+    paramD: -2.43,
+    attractorStrength: 2.0,
+    attractorSpeed: 0.5,
     cameraPositionX: 0,
     cameraPositionY: 0,
     cameraPositionZ: 50,
@@ -67,13 +79,13 @@ export const SceneForm: React.FC<SceneFormProps> = ({
     }
   }, [currentCameraState]);
 
-  const handleChange = (key: keyof SceneParameters, value: number) => {
+  const handleChange = (key: keyof SceneParameters, value: number | boolean | VisualizationMode) => {
     const newParameters = { ...parameters, [key]: value };
     setParameters(newParameters);
     onParametersChange(newParameters);
 
     // Immediately apply camera changes if it's a camera parameter
-    if (key.startsWith("camera") && onCameraStateChange) {
+    if (key.startsWith("camera") && onCameraStateChange && typeof value === "number") {
       const cameraState: CameraState = {
         position: {
           x: key === "cameraPositionX" ? value : newParameters.cameraPositionX,
@@ -131,13 +143,16 @@ export const SceneForm: React.FC<SceneFormProps> = ({
 
       // Validate that all required parameters are present
       const requiredParams = [
+        "visualizationMode",
         "gridWidth",
         "gridHeight",
         "lineThickness",
-        "nodeCount",
-        "nodeSpeed",
-        "nodeStrength",
-        "nodePulse",
+        "paramA",
+        "paramB",
+        "paramC",
+        "paramD",
+        "attractorStrength",
+        "attractorSpeed",
         "cameraPositionX",
         "cameraPositionY",
         "cameraPositionZ",
@@ -147,7 +162,12 @@ export const SceneForm: React.FC<SceneFormProps> = ({
       ];
 
       for (const param of requiredParams) {
-        if (typeof newParameters[param as keyof SceneParameters] !== "number") {
+        const value = newParameters[param as keyof SceneParameters];
+        if (param === "visualizationMode") {
+          if (value !== "grid-deformation") {
+            throw new Error(`Invalid visualization mode: ${param}`);
+          }
+        } else if (typeof value !== "number") {
           throw new Error(`Missing or invalid parameter: ${param}`);
         }
       }
@@ -176,7 +196,24 @@ export const SceneForm: React.FC<SceneFormProps> = ({
         <h3 className="text-lg font-semibold text-white">Scene Parameters</h3>
       </div>
 
-      {/* Scene Parameters */}
+      {/* Visualization Mode */}
+      <div className="space-y-3">
+        <h4 className="text-md font-medium text-white/90">Visualization Mode</h4>
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-white/80">
+            <input
+              type="radio"
+              name="visualizationMode"
+              value="grid-deformation"
+              checked={parameters.visualizationMode === "grid-deformation"}
+              onChange={(e) => handleChange("visualizationMode", e.target.value as VisualizationMode)}
+              className="mr-2"
+            />
+            Grid Deformation
+          </label>
+        </div>
+      </div>
+
       {/* Scene Parameters */}
       <div className="space-y-3">
         <h4 className="text-md font-medium text-white/90">Grid Settings</h4>
@@ -242,90 +279,131 @@ export const SceneForm: React.FC<SceneFormProps> = ({
         </div>
       </div>
 
-      {/* Node Parameters */}
+      {/* Attractor Parameters */}
       <div className="space-y-3">
-        <h4 className="text-md font-medium text-white/90">Node Simulation</h4>
+        <h4 className="text-md font-medium text-white/90">GPU Attractor Deformation</h4>
         <div className="space-y-1">
           <label
-            htmlFor="nodeCount"
+            htmlFor="paramA"
             className="block text-sm font-medium text-white/80"
           >
-            Node Count: {parameters.nodeCount}
+            Parameter A: {parameters.paramA.toFixed(2)}
           </label>
           <input
-            id="nodeCount"
+            id="paramA"
             type="range"
-            min="0"
-            max="20"
-            step="1"
-            value={parameters.nodeCount}
+            min="-3"
+            max="3"
+            step="0.01"
+            value={parameters.paramA}
             onChange={(e) =>
-              handleChange("nodeCount", parseInt(e.target.value))
+              handleChange("paramA", parseFloat(e.target.value))
             }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
           <label
-            htmlFor="nodeSpeed"
+            htmlFor="paramB"
             className="block text-sm font-medium text-white/80"
           >
-            Node Speed: {parameters.nodeSpeed.toFixed(2)}
+            Parameter B: {parameters.paramB.toFixed(2)}
           </label>
           <input
-            id="nodeSpeed"
+            id="paramB"
+            type="range"
+            min="-3"
+            max="3"
+            step="0.01"
+            value={parameters.paramB}
+            onChange={(e) =>
+              handleChange("paramB", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor="paramC"
+            className="block text-sm font-medium text-white/80"
+          >
+            Parameter C: {parameters.paramC.toFixed(2)}
+          </label>
+          <input
+            id="paramC"
+            type="range"
+            min="-3"
+            max="3"
+            step="0.01"
+            value={parameters.paramC}
+            onChange={(e) =>
+              handleChange("paramC", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor="paramD"
+            className="block text-sm font-medium text-white/80"
+          >
+            Parameter D: {parameters.paramD.toFixed(2)}
+          </label>
+          <input
+            id="paramD"
+            type="range"
+            min="-3"
+            max="3"
+            step="0.01"
+            value={parameters.paramD}
+            onChange={(e) =>
+              handleChange("paramD", parseFloat(e.target.value))
+            }
+            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
+          />
+        </div>
+        <div className="space-y-1">
+          <label
+            htmlFor="attractorStrength"
+            className="block text-sm font-medium text-white/80"
+          >
+            Attractor Strength: {parameters.attractorStrength.toFixed(2)}
+          </label>
+          <input
+            id="attractorStrength"
             type="range"
             min="0"
-            max="5"
+            max="10"
             step="0.1"
-            value={parameters.nodeSpeed}
+            value={parameters.attractorStrength}
             onChange={(e) =>
-              handleChange("nodeSpeed", parseFloat(e.target.value))
+              handleChange("attractorStrength", parseFloat(e.target.value))
             }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
         <div className="space-y-1">
           <label
-            htmlFor="nodeStrength"
+            htmlFor="attractorSpeed"
             className="block text-sm font-medium text-white/80"
           >
-            Node Strength: {parameters.nodeStrength.toFixed(2)}
+            Attractor Speed: {parameters.attractorSpeed.toFixed(2)}
           </label>
           <input
-            id="nodeStrength"
-            type="range"
-            min="0"
-            max="5"
-            step="0.1"
-            value={parameters.nodeStrength}
-            onChange={(e) =>
-              handleChange("nodeStrength", parseFloat(e.target.value))
-            }
-            className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-        <div className="space-y-1">
-          <label
-            htmlFor="nodePulse"
-            className="block text-sm font-medium text-white/80"
-          >
-            Node Pulse: {parameters.nodePulse.toFixed(2)}
-          </label>
-          <input
-            id="nodePulse"
+            id="attractorSpeed"
             type="range"
             min="0"
             max="2"
             step="0.01"
-            value={parameters.nodePulse}
+            value={parameters.attractorSpeed}
             onChange={(e) =>
-              handleChange("nodePulse", parseFloat(e.target.value))
+              handleChange("attractorSpeed", parseFloat(e.target.value))
             }
             className="w-full h-2 bg-primary/20 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
       </div>
+
 
       {/* Camera Parameters */}
       <div className="space-y-3">

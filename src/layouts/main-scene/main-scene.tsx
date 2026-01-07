@@ -8,13 +8,16 @@ import {
 
 export const MainScene: React.FC = () => {
   const [sceneParameters, setSceneParameters] = useState<SceneParameters>({
+    visualizationMode: "grid-deformation",
     gridWidth: 20,
     gridHeight: 20,
     lineThickness: 0.02,
-    nodeCount: 3,
-    nodeSpeed: 0.5,
-    nodeStrength: 1.0,
-    nodePulse: 0.5,
+    paramA: -2.24,
+    paramB: 0.43,
+    paramC: -0.65,
+    paramD: -2.43,
+    attractorStrength: 2.0,
+    attractorSpeed: 0.5,
     cameraPositionX: 0,
     cameraPositionY: 0,
     cameraPositionZ: 50,

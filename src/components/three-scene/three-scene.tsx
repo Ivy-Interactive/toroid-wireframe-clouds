@@ -15,88 +15,97 @@ interface ThreeSceneProps {
   currentCameraState?: CameraState;
 }
 
-// Vertex Shader
+// Vertex Shader - Grid with GPU Attractor Deformation
 const vertexShader = `
   uniform float uTime;
   uniform float uGridWidth;
   uniform float uGridHeight;
-  uniform float uNodeCount;
-  uniform float uNodeSpeed;
-  uniform float uNodeStrength;
-  uniform float uNodePulse;
+  uniform vec2 uParamsA;  // (a, b) parameters for De Jong
+  uniform vec2 uParamsB;  // (c, d) parameters for De Jong
+  uniform float uAttractorStrength; // How strong the deformation is
+  uniform float uAttractorSpeed; // Animation speed
   
   // Instance attributes
   attribute vec3 instanceOffset;
-  attribute vec2 instanceUv; // Store grid coord (ix, iy) here
 
   varying vec2 vUv;
   varying vec3 vPos;
   varying float vDistortion;
 
-  // Simplex Noise (optional, or just use sin/cos for nodes)
-  // We'll simulate "nodes" as moving points in space
-  
-  vec3 getNodePos(float i) {
-    float t = uTime * uNodeSpeed * 0.5 + i * 10.0;
-    // Nodes move in a large volume
-    return vec3(
-      sin(t * 0.7) * uGridWidth * 0.5,
-      cos(t * 0.5) * uGridHeight * 0.5,
-      sin(t * 1.1) * 5.0
+  // De Jong Attractor Flow Field for Plane Deformation
+  // Uses the standard De Jong formula:
+  // x_{t+1} = sin(a * y_t) - cos(b * x_t)
+  // y_{t+1} = sin(c * x_t) - cos(d * y_t)
+  // For plane deformation, we use this as a flow field (velocity vector at each point)
+  vec2 getAttractorFlowField(vec2 pos, float time) {
+    // Normalize position to attractor space
+    float scale = 0.1;
+    float x = pos.x * scale;
+    float y = pos.y * scale;
+    
+    // Standard De Jong Attractor formula
+    // This computes the next position, which we use as flow direction
+    float flowX = sin(uParamsA.x * y) - cos(uParamsA.y * x);
+    float flowY = sin(uParamsB.x * x) - cos(uParamsB.y * y);
+    
+    // Add time-based animation by rotating the flow field
+    // This creates smooth, organic movement
+    float angle = time * 0.3;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    vec2 rotatedFlow = vec2(
+      flowX * cosA - flowY * sinA,
+      flowX * sinA + flowY * cosA
     );
+    
+    // Add multi-scale flow for richer patterns
+    float scale2 = scale * 1.8;
+    float x2 = pos.x * scale2;
+    float y2 = pos.y * scale2;
+    float flowX2 = sin(uParamsA.x * y2) - cos(uParamsA.y * x2);
+    float flowY2 = sin(uParamsB.x * x2) - cos(uParamsB.y * y2);
+    
+    // Blend scales for smoother, more organic flow
+    vec2 flow = rotatedFlow * 0.75 + vec2(flowX2, flowY2) * 0.25;
+    
+    // Return scaled flow direction
+    return flow * uAttractorStrength;
   }
 
   void main() {
     vUv = uv;
-    vec3 pos = position + instanceOffset; // Local pos + offset
-    vec3 finalPos = pos;
     
-    // Node Influence
-    float totalDistortion = 0.0;
+    // Base position in grid
+    vec3 pos = position + instanceOffset;
     
-    for(float i = 0.0; i < 20.0; i++) {
-        if (i >= uNodeCount) break;
-        
-        vec3 nodePos = getNodePos(i);
-        float dist = distance(pos, nodePos);
-        
-        // Influence strength drops with distance
-        // "Twisted around nodes"
-        
-        float influence = smoothstep(8.0 + uNodePulse * 2.0 * sin(uTime + i), 0.0, dist);
-        
-        // Apply twist/pull
-        // Rotate around Z based on influence
-        float angle = influence * uNodeStrength * (1.0 + uNodePulse * sin(uTime * 2.0));
-        
-        float s = sin(angle);
-        float c = cos(angle);
-        
-        // Rotate around node center? Or just simple twist
-        // Let's rotate the difference vector
-        vec3 delta = finalPos - nodePos;
-        
-        // 2D rotation for Z twist, 3D is harder to control without looking messy
-        // Let's try a 3D curl or just pull towards node
-        
-        // Simple attractor/repulsor with twist
-        // Move towards node
-        // finalPos += normalize(delta) * influence * 2.0 * sin(uTime); 
-        
-        // Z-displacement (wave)
-        finalPos.z += influence * 5.0 * sin(dist * 0.8 - uTime * 2.0) * uNodeStrength;
-        
-        totalDistortion += influence;
-    }
+    // Get world position for attractor calculation
+    vec2 worldPos = vec2(pos.x, pos.y);
     
+    // Calculate attractor flow field deformation
+    float time = uTime * uAttractorSpeed;
+    vec2 flow = getAttractorFlowField(worldPos, time);
+    
+    // Apply flow field deformation smoothly
+    // The flow vector tells us which direction to move this point
+    float flowMag = length(flow);
+    
+    // Apply deformation with smooth interpolation
+    vec3 finalPos = vec3(
+      pos.x + flow.x,
+      pos.y + flow.y,
+      pos.z + smoothstep(0.0, 1.0, flowMag) * 0.5 // Add Z depth based on flow magnitude with smooth interpolation
+    );
+    
+    // Calculate distortion intensity for coloring
+    float dist = flowMag;
+    vDistortion = dist;
     vPos = finalPos;
-    vDistortion = totalDistortion;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(finalPos, 1.0);
   }
 `;
 
-// Fragment Shader
+// Fragment Shader - Grid with borders and ring
 const fragmentShader = `
   uniform float uTime;
   uniform float uLineThickness;
@@ -109,11 +118,10 @@ const fragmentShader = `
     // Standard UV 0..1
     vec2 uv = vUv;
     
-    // Line Thickness from uniform (used for both border and ring)
+    // Line Thickness from uniform
     float thickness = uLineThickness;
 
     // Borders
-    // Draw a thin line at the edges
     vec2 border = step(vec2(thickness), uv) * step(uv, vec2(1.0 - thickness));
     float isContent = border.x * border.y;
     float isBorder = 1.0 - isContent;
@@ -205,7 +213,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     };
   }, []);
 
-  // Update Geometry (InstancedMesh)
+  // Update Geometry (InstancedMesh Grid with Attractor Deformation)
   useEffect(() => {
     if (!sceneSetupRef.current) return;
     const scene = sceneSetupRef.current.scene;
@@ -217,6 +225,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
       (meshRef.current.material as THREE.Material).dispose();
     }
 
+    // Grid deformation mode
     const width = parameters?.gridWidth ?? 20;
     const height = parameters?.gridHeight ?? 20;
     const count = width * height;
@@ -233,15 +242,24 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         uGridWidth: { value: width },
         uGridHeight: { value: height },
         uColor: { value: new THREE.Color(0x00ff99) },
-        uLineThickness: { value: parameters?.lineThickness ?? 0.02 }, // Default thinner
-        uNodeCount: { value: parameters?.nodeCount ?? 3 },
-        uNodeSpeed: { value: parameters?.nodeSpeed ?? 0.5 },
-        uNodeStrength: { value: parameters?.nodeStrength ?? 1.0 },
-        uNodePulse: { value: parameters?.nodePulse ?? 0.5 },
+        uLineThickness: { value: parameters?.lineThickness ?? 0.02 },
+        uParamsA: { 
+          value: new THREE.Vector2(
+            parameters?.paramA ?? 1.5, 
+            parameters?.paramB ?? 1.5
+          ) 
+        },
+        uParamsB: { 
+          value: new THREE.Vector2(
+            parameters?.paramC ?? 1.5, 
+            parameters?.paramD ?? 1.5
+          ) 
+        },
+        uAttractorStrength: { value: parameters?.attractorStrength ?? 2.0 },
+        uAttractorSpeed: { value: parameters?.attractorSpeed ?? 0.5 },
       },
       transparent: true,
       side: THREE.DoubleSide,
-      // depthWrite: false, // Maybe needed for transparency overlap?
     });
 
     uniformsRef.current = material.uniforms;
@@ -250,11 +268,13 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     const mesh = new THREE.InstancedMesh(geometry, material, count);
 
     // Initialize Instanced Attributes
-    // We need offsets to position them in a grid
     const offsets = new Float32Array(count * 3);
 
     // Make them connected: spacing = size = 1.0
     const cellSize = 1.0;
+
+    // Create dummy object outside the loop for better performance
+    const dummy = new THREE.Object3D();
 
     for (let iy = 0; iy < height; iy++) {
       for (let ix = 0; ix < width; ix++) {
@@ -270,7 +290,6 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         offsets[i * 3 + 2] = z;
 
         // Set dummy matrix (identity) because we use GLSL to position
-        const dummy = new THREE.Object3D();
         dummy.position.set(0, 0, 0);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
@@ -287,27 +306,41 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     scene.add(mesh);
     meshRef.current = mesh;
   }, [
+    parameters?.visualizationMode,
     parameters?.gridWidth,
     parameters?.gridHeight,
-    // Re-create mesh on grid size change
-    // Other parameters are uniforms, updated below
+    parameters?.paramA,
+    parameters?.paramB,
+    parameters?.paramC,
+    parameters?.paramD,
   ]);
 
-  // Update Uniforms without re-creating mesh
+  // Update Uniforms without re-creating mesh (only for grid deformation mode)
   useEffect(() => {
-    if (uniformsRef.current && parameters) {
-      uniformsRef.current.uLineThickness.value = parameters.lineThickness;
-      uniformsRef.current.uNodeCount.value = parameters.nodeCount;
-      uniformsRef.current.uNodeSpeed.value = parameters.nodeSpeed;
-      uniformsRef.current.uNodeStrength.value = parameters.nodeStrength;
-      uniformsRef.current.uNodePulse.value = parameters.nodePulse;
+    if (uniformsRef.current && parameters && parameters.visualizationMode === "grid-deformation") {
+      uniformsRef.current.uLineThickness.value = parameters.lineThickness ?? 0.02;
+      if (parameters.paramA !== undefined && parameters.paramB !== undefined) {
+        uniformsRef.current.uParamsA.value.set(parameters.paramA, parameters.paramB);
+      }
+      if (parameters.paramC !== undefined && parameters.paramD !== undefined) {
+        uniformsRef.current.uParamsB.value.set(parameters.paramC, parameters.paramD);
+      }
+      if (parameters.attractorStrength !== undefined) {
+        uniformsRef.current.uAttractorStrength.value = parameters.attractorStrength;
+      }
+      if (parameters.attractorSpeed !== undefined) {
+        uniformsRef.current.uAttractorSpeed.value = parameters.attractorSpeed;
+      }
     }
   }, [
+    parameters?.visualizationMode,
     parameters?.lineThickness,
-    parameters?.nodeCount,
-    parameters?.nodeSpeed,
-    parameters?.nodeStrength,
-    parameters?.nodePulse,
+    parameters?.paramA,
+    parameters?.paramB,
+    parameters?.paramC,
+    parameters?.paramD,
+    parameters?.attractorStrength,
+    parameters?.attractorSpeed,
   ]);
 
   // Sync Camera
