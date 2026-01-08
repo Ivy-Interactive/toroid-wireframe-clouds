@@ -44,18 +44,18 @@ export const SceneForm: React.FC<SceneFormProps> = ({
 }) => {
   const [parameters, setParameters] = useState<SceneParameters>({
     visualizationMode: "grid-deformation",
-    gridWidth: 20,
-    gridHeight: 20,
+    gridWidth: 60,
+    gridHeight: 100,
     lineThickness: 0.02,
-    paramA: -2.24,
-    paramB: 0.43,
-    paramC: -0.65,
-    paramD: -2.43,
-    attractorStrength: 2.0,
+    paramA: 1.7,
+    paramB: 1.7,
+    paramC: 0.6,
+    paramD: 1.2,
+    attractorStrength: 8.5,
     attractorSpeed: 0.5,
     cameraPositionX: 0,
-    cameraPositionY: 0,
-    cameraPositionZ: 50,
+    cameraPositionY: -30,
+    cameraPositionZ: 80,
     cameraTargetX: 0,
     cameraTargetY: 0,
     cameraTargetZ: 0,
@@ -63,6 +63,12 @@ export const SceneForm: React.FC<SceneFormProps> = ({
 
   const [copyStatus, setCopyStatus] = useState<string>("");
   const [pasteStatus, setPasteStatus] = useState<string>("");
+
+  // Initialize parameters on mount
+  useEffect(() => {
+    onParametersChange(parameters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   // Sync camera parameters when current camera state changes
   useEffect(() => {

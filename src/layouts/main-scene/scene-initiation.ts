@@ -51,8 +51,9 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
   scene.add(ambientLight);
 
-  // Position camera
-  camera.position.z = 5;
+  // Position camera - further away to see the larger grid (60x100)
+  camera.position.set(0, -30, 80);
+  camera.lookAt(0, 0, 0);
 
   // --- OrbitControls setup ---
   const controls = new OrbitControls(camera, renderer.domElement);

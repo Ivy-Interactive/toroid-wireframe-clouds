@@ -257,8 +257,8 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     }
 
     // Grid deformation mode
-    const width = parameters?.gridWidth ?? 20;
-    const height = parameters?.gridHeight ?? 20;
+    const width = parameters?.gridWidth ?? 60;
+    const height = parameters?.gridHeight ?? 100;
     const segmentsX = Math.max(1, Math.floor(width * 10));
     const segmentsY = Math.max(1, Math.floor(height * 10));
     const geometry = new THREE.PlaneGeometry(width, height, segmentsX, segmentsY);
@@ -275,17 +275,17 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         uLineThickness: { value: parameters?.lineThickness ?? 0.02 },
         uParamsA: { 
           value: new THREE.Vector2(
-            parameters?.paramA ?? 1.5, 
-            parameters?.paramB ?? 1.5
+            parameters?.paramA ?? 1.7, 
+            parameters?.paramB ?? 1.7
           ) 
         },
         uParamsB: { 
           value: new THREE.Vector2(
-            parameters?.paramC ?? 1.5, 
-            parameters?.paramD ?? 1.5
+            parameters?.paramC ?? 0.6, 
+            parameters?.paramD ?? 1.2
           ) 
         },
-        uAttractorStrength: { value: parameters?.attractorStrength ?? 2.0 },
+        uAttractorStrength: { value: parameters?.attractorStrength ?? 8.5 },
         uAttractorSpeed: { value: parameters?.attractorSpeed ?? 0.5 },
       },
       transparent: true,
