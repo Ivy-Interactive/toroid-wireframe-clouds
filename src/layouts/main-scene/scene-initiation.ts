@@ -38,8 +38,8 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   renderer.setClearColor(0x041209, 1);
 
   const canvas = renderer.domElement;
-  canvas.style.width = `${container.clientWidth}px`;
-  canvas.style.height = `${container.clientHeight}px`;
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
   canvas.style.display = "block";
 
   container.appendChild(renderer.domElement);

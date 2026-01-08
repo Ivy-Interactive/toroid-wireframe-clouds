@@ -147,23 +147,43 @@ const fragmentShader = `
     // Standard UV 0..1
     vec2 uv = vUv;
     
-    // Repeat UVs per grid cell so borders/rings tile seamlessly
-    vec2 cellUV = fract(uv * vec2(uGridWidth, uGridHeight));
+    // Calculate continuous scaled UVs for correct derivative calculation
+    vec2 scaledUV = uv * vec2(uGridWidth, uGridHeight);
+    
+    // Repeat UVs per grid cell
+    vec2 cellUV = fract(scaledUV);
     
     // Line Thickness from uniform
     float thickness = uLineThickness;
 
-    // Borders
-    vec2 border = step(vec2(thickness), cellUV) * step(cellUV, vec2(1.0 - thickness));
-    float isContent = border.x * border.y;
+    // Calculate derivative for anti-aliasing on the CONTINUOUS coords
+    // This avoids spikes at the cell boundaries where fract() jumps
+    vec2 aa = fwidth(scaledUV);
+    // Ensure a minimum AA width
+    aa = max(aa, vec2(0.001));
+
+    // Borders with AA
+    // smoothness is based on aa width
+    vec2 borderBottomLeft = smoothstep(vec2(thickness), vec2(thickness) + aa, cellUV);
+    vec2 borderTopRight = smoothstep(vec2(thickness), vec2(thickness) + aa, 1.0 - cellUV);
+    
+    float isContent = borderBottomLeft.x * borderBottomLeft.y * borderTopRight.x * borderTopRight.y;
     float isBorder = 1.0 - isContent;
 
     // Quarter Ring calculation
     float dist = length(cellUV);
     float radius = 1.0; 
     
+    // AA for the ring - also use continuous derivative estimation
+    // For circular distance, fwidth(dist) works reasonably well inside the cell, 
+    // but at boundaries dist also jumps.
+    // Actually, fwidth(cellUV) was the issue. 
+    // We can approximate radial derivative from aa.x and aa.y
+    float distAA = length(aa); 
+    distAA = max(distAA, 0.001);
+
     // Make the ring consistent width
-    float shape = 1.0 - smoothstep(thickness, thickness + 0.01, abs(dist - radius + thickness/2.0));
+    float shape = 1.0 - smoothstep(thickness, thickness + distAA, abs(dist - radius + thickness/2.0));
     
     // Combine Border and Ring
     float alpha = max(isBorder, shape);
@@ -171,7 +191,8 @@ const fragmentShader = `
     // Color #00D18E = rgb(0, 209, 142)
     vec3 color = vec3(0.0/255.0, 209.0/255.0, 142.0/255.0);
 
-    if (alpha < 0.1) discard;
+    // Soft discard
+    if (alpha < 0.01) discard;
 
     gl_FragColor = vec4(color, alpha);
   }
@@ -220,20 +241,35 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     };
     animate();
 
-    // Standard resize handling (same as before)
-    const handleResize = () => {
-      if (sceneSetupRef.current && containerRef.current) {
+    // Resize handling using ResizeObserver
+    const updateSize = (width: number, height: number) => {
+      if (sceneSetupRef.current && width > 0 && height > 0) {
         const { camera, renderer } = sceneSetupRef.current;
-        const container = containerRef.current;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+
+        // Update styling if needed (though 100% handles it usually)
+        // Adjust camera aspect ratio
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        renderer.setSize(width, height, false);
+
+        // Update renderer size to match display size
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(width, height, false); // false = do not update style (keep 100%)
       }
     };
-    const resizeObserver = new ResizeObserver(() => handleResize());
-    if (containerRef.current) resizeObserver.observe(containerRef.current);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        // Use contentRect for precise content box size
+        // This avoids issues with padding if any (though usually none on container)
+        // and synchronizes perfectly with the layout size
+        const { width, height } = entry.contentRect;
+        updateSize(width, height);
+      }
+    });
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
 
     return () => {
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
@@ -261,7 +297,12 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     const height = parameters?.gridHeight ?? 40;
     const segmentsX = Math.max(1, Math.floor(width * 12));
     const segmentsY = Math.max(1, Math.floor(height * 12));
-    const geometry = new THREE.PlaneGeometry(width, height, segmentsX, segmentsY);
+    const geometry = new THREE.PlaneGeometry(
+      width,
+      height,
+      segmentsX,
+      segmentsY
+    );
 
     // Shader Material
     const material = new THREE.ShaderMaterial({
@@ -273,19 +314,19 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         uGridHeight: { value: height },
         uColor: { value: new THREE.Color(0x00d18e) },
         uLineThickness: { value: parameters?.lineThickness ?? 0.02 },
-        uParamsA: { 
+        uParamsA: {
           value: new THREE.Vector2(
-            parameters?.paramA ?? 1.4, 
+            parameters?.paramA ?? 1.4,
             parameters?.paramB ?? -1.55
-          ) 
+          ),
         },
-        uParamsB: { 
+        uParamsB: {
           value: new THREE.Vector2(
-            parameters?.paramC ?? 1.25, 
+            parameters?.paramC ?? 1.25,
             parameters?.paramD ?? 1.35
-          ) 
+          ),
         },
-        uAttractorStrength: { value: parameters?.attractorStrength ?? 8.50 },
+        uAttractorStrength: { value: parameters?.attractorStrength ?? 8.5 },
         uAttractorSpeed: { value: parameters?.attractorSpeed ?? 0.25 },
       },
       transparent: true,
@@ -310,16 +351,28 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
 
   // Update Uniforms without re-creating mesh (only for grid deformation mode)
   useEffect(() => {
-    if (uniformsRef.current && parameters && parameters.visualizationMode === "grid-deformation") {
-      uniformsRef.current.uLineThickness.value = parameters.lineThickness ?? 0.02;
+    if (
+      uniformsRef.current &&
+      parameters &&
+      parameters.visualizationMode === "grid-deformation"
+    ) {
+      uniformsRef.current.uLineThickness.value =
+        parameters.lineThickness ?? 0.02;
       if (parameters.paramA !== undefined && parameters.paramB !== undefined) {
-        uniformsRef.current.uParamsA.value.set(parameters.paramA, parameters.paramB);
+        uniformsRef.current.uParamsA.value.set(
+          parameters.paramA,
+          parameters.paramB
+        );
       }
       if (parameters.paramC !== undefined && parameters.paramD !== undefined) {
-        uniformsRef.current.uParamsB.value.set(parameters.paramC, parameters.paramD);
+        uniformsRef.current.uParamsB.value.set(
+          parameters.paramC,
+          parameters.paramD
+        );
       }
       if (parameters.attractorStrength !== undefined) {
-        uniformsRef.current.uAttractorStrength.value = parameters.attractorStrength;
+        uniformsRef.current.uAttractorStrength.value =
+          parameters.attractorStrength;
       }
       if (parameters.attractorSpeed !== undefined) {
         uniformsRef.current.uAttractorSpeed.value = parameters.attractorSpeed;
