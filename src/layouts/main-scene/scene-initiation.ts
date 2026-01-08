@@ -35,7 +35,7 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(container.clientWidth, container.clientHeight, false);
-  renderer.setClearColor(0x1a1a2e, 1);
+  renderer.setClearColor(0x041209, 1);
 
   const canvas = renderer.domElement;
   canvas.style.width = `${container.clientWidth}px`;
@@ -51,8 +51,9 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
   scene.add(ambientLight);
 
-  // Position camera
-  camera.position.z = 5;
+  // Position camera to emphasize loops
+  camera.position.set(0, -30, 90);
+  camera.lookAt(0, 0, 0);
 
   // --- OrbitControls setup ---
   const controls = new OrbitControls(camera, renderer.domElement);
