@@ -24,9 +24,6 @@ const vertexShader = `
   uniform vec2 uParamsB;  // (c, d) parameters for De Jong
   uniform float uAttractorStrength; // How strong the deformation is
   uniform float uAttractorSpeed; // Animation speed
-  
-  // Instance attributes
-  attribute vec3 instanceOffset;
 
   varying vec2 vUv;
   varying vec3 vPos;
@@ -100,7 +97,7 @@ const vertexShader = `
     vUv = uv;
     
     // Base position: vertex position in world space (before deformation)
-    vec3 basePos = position + instanceOffset;
+    vec3 basePos = position;
     
     // Get world position for attractor calculation (use actual vertex position)
     // This ensures connected squares deform together smoothly
@@ -140,6 +137,8 @@ const fragmentShader = `
   uniform float uTime;
   uniform float uLineThickness;
   uniform vec3 uColor;
+  uniform float uGridWidth;
+  uniform float uGridHeight;
 
   varying vec2 vUv;
   varying float vDistortion;
@@ -148,16 +147,19 @@ const fragmentShader = `
     // Standard UV 0..1
     vec2 uv = vUv;
     
+    // Repeat UVs per grid cell so borders/rings tile seamlessly
+    vec2 cellUV = fract(uv * vec2(uGridWidth, uGridHeight));
+    
     // Line Thickness from uniform
     float thickness = uLineThickness;
 
     // Borders
-    vec2 border = step(vec2(thickness), uv) * step(uv, vec2(1.0 - thickness));
+    vec2 border = step(vec2(thickness), cellUV) * step(cellUV, vec2(1.0 - thickness));
     float isContent = border.x * border.y;
     float isBorder = 1.0 - isContent;
 
     // Quarter Ring calculation
-    float dist = length(uv);
+    float dist = length(cellUV);
     float radius = 1.0; 
     
     // Make the ring consistent width
@@ -185,7 +187,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
   const sceneSetupRef = useRef<SceneSetup | null>(null);
   const animationIdRef = useRef<number | null>(null);
   const statsRef = useRef<Stats | null>(null);
-  const meshRef = useRef<THREE.InstancedMesh | null>(null);
+  const meshRef = useRef<THREE.Mesh | null>(null);
   const uniformsRef = useRef<any>(null);
 
   // Initialize Scene
@@ -242,7 +244,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     };
   }, []);
 
-  // Update Geometry (InstancedMesh Grid with Attractor Deformation)
+  // Update Geometry (single PlaneGeometry grid with shared vertices)
   useEffect(() => {
     if (!sceneSetupRef.current) return;
     const scene = sceneSetupRef.current.scene;
@@ -257,10 +259,9 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
     // Grid deformation mode
     const width = parameters?.gridWidth ?? 20;
     const height = parameters?.gridHeight ?? 20;
-    const count = width * height;
-
-    // Geometry for a single square
-    const geometry = new THREE.PlaneGeometry(1, 1);
+    const segmentsX = Math.max(1, Math.floor(width * 10));
+    const segmentsY = Math.max(1, Math.floor(height * 10));
+    const geometry = new THREE.PlaneGeometry(width, height, segmentsX, segmentsY);
 
     // Shader Material
     const material = new THREE.ShaderMaterial({
@@ -293,45 +294,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
 
     uniformsRef.current = material.uniforms;
 
-    // Instanced Mesh
-    const mesh = new THREE.InstancedMesh(geometry, material, count);
-
-    // Initialize Instanced Attributes
-    const offsets = new Float32Array(count * 3);
-
-    // Make them connected: spacing = size = 1.0
-    const cellSize = 1.0;
-
-    // Create dummy object outside the loop for better performance
-    const dummy = new THREE.Object3D();
-
-    for (let iy = 0; iy < height; iy++) {
-      for (let ix = 0; ix < width; ix++) {
-        const i = iy * width + ix;
-
-        // Centered Grid - squares are connected (edges touch)
-        // Each square is 1x1, so centers should be 1.0 apart
-        const x = (ix - (width - 1) / 2) * cellSize;
-        const y = (iy - (height - 1) / 2) * cellSize;
-        const z = 0;
-
-        offsets[i * 3 + 0] = x;
-        offsets[i * 3 + 1] = y;
-        offsets[i * 3 + 2] = z;
-
-        // Set dummy matrix (identity) because we use GLSL to position
-        dummy.position.set(0, 0, 0);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      }
-    }
-
-    geometry.setAttribute(
-      "instanceOffset",
-      new THREE.InstancedBufferAttribute(offsets, 3)
-    );
-
-    mesh.instanceMatrix.needsUpdate = true;
+    const mesh = new THREE.Mesh(geometry, material);
 
     scene.add(mesh);
     meshRef.current = mesh;
