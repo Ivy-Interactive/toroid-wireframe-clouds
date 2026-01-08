@@ -374,7 +374,7 @@ export const SceneForm: React.FC<SceneFormProps> = ({
             type="range"
             min="0"
             max="10"
-            step="0.1"
+            step="0.01"
             value={parameters.attractorStrength}
             onChange={(e) =>
               handleChange("attractorStrength", parseFloat(e.target.value))

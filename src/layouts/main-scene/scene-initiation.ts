@@ -35,7 +35,7 @@ export const createScene = (container: HTMLElement): SceneSetup => {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(container.clientWidth, container.clientHeight, false);
-  renderer.setClearColor(0x1a1a2e, 1);
+  renderer.setClearColor(0x041209, 1);
 
   const canvas = renderer.domElement;
   canvas.style.width = `${container.clientWidth}px`;

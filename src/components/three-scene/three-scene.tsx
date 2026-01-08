@@ -166,9 +166,13 @@ const fragmentShader = `
     // Combine Border and Ring
     float alpha = max(isBorder, shape);
     
-    vec3 color = uColor;
-    // Add blueish glow on distortion
-    color += vec3(0.2, 0.5, 1.0) * vDistortion * 0.5;
+    // Gradient from darkest (#03281A) to lightest (#037752) based on distortion
+    // #03281A = rgb(3, 40, 26) = vec3(0.0118, 0.1569, 0.1020)
+    // #037752 = rgb(3, 119, 82) = vec3(0.0118, 0.4667, 0.3216)
+    float distortionFactor = clamp(vDistortion * 0.8, 0.0, 1.0);
+    vec3 darkestGreen = vec3(3.0/255.0, 40.0/255.0, 26.0/255.0);
+    vec3 lightestGreen = vec3(3.0/255.0, 119.0/255.0, 82.0/255.0);
+    vec3 color = mix(darkestGreen, lightestGreen, distortionFactor);
 
     if (alpha < 0.1) discard;
 
@@ -271,7 +275,7 @@ export const ThreeScene: React.FC<ThreeSceneProps> = ({
         uTime: { value: 0 },
         uGridWidth: { value: width },
         uGridHeight: { value: height },
-        uColor: { value: new THREE.Color(0x00ff99) },
+        uColor: { value: new THREE.Color(0x03281a) },
         uLineThickness: { value: parameters?.lineThickness ?? 0.02 },
         uParamsA: { 
           value: new THREE.Vector2(
